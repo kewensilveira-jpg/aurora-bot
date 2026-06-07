@@ -3,8 +3,8 @@ const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// 🔑 COLE SUA CHAVE DO GEMINI ENTRE AS ASPAS ABAIXO:
-const GEMINI_API_KEY = 'AQ.Ab8RN6JyG4-6CTW6W-HWTBq6H2HBkbp03L_MWEz-mZqkcysqSA';
+// 🔑 A Railway vai ignorar essa chave debaixo e usar a que você colocou no painel (GEMINI_API_KEY)
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AQ.Ab8RN6JyG4-6CTW6W-HWTBq6H2HBkbp03L_MWEz-mZqkcysqSA';
 
 const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
 
@@ -52,10 +52,14 @@ client.on('ready', () => {
 });
 
 client.on('message_create', async (msg) => {
-    if (msg.body.startsWith('🤖')) return;
+    // 1. Evita loops: Se a mensagem foi gerada pelo robô E começa com o cabeçalho dele, ignora!
+    if (msg.fromMe && msg.body.startsWith('🔮 *Aurora:*')) return;
+
+    // 2. Não responde em grupos para não misturar as coisas
     if (msg.from.endsWith('@g.us') || msg.to.endsWith('@g.us')) return;
 
-    if (!msg.fromMe) return;
+    // 3. Segurança: Só processa mensagens que envolvam o seu número
+    if (msg.from !== '555197984859@c.us' && msg.to !== '555197984859@c.us') return;
 
     let textoUsuario = msg.body.trim();
     let conteudoParaIA = [];
@@ -88,6 +92,7 @@ client.on('message_create', async (msg) => {
 
     if (!textoUsuario && conteudoParaIA.length === 0) return;
 
+    // Se quem enviou foi você no seu chat, o log vai registrar na hora!
     console.log(`📡 PROCESSANDO SUA MENSAGEM: "${textoUsuario || 'Mensagem de voz'}"`);
 
     try {
@@ -110,7 +115,7 @@ client.on('message_create', async (msg) => {
         
         Se houver um áudio anexado nas mídias, escute e processe o que foi dito. O usuário está falando por voz.
         Se ele estiver informando um gasto (ex: "gastei 50 reais no mercado"), extraia as informações e adicione OBRIGATORIAMENTE no final da resposta a tag JSON_GASTO seguida do objeto exatamente assim: JSON_GASTO {"data": "${hoje}", "valor": X, "descricao": "Y"}.
-        Se for outra coisa, responda de forma corta, simpática e usando emojis.
+        Se for outra coisa, responda de forma curta, simpática e usando emojis.
         `;
 
         const dadosEnvio = [contextoPrompt, textoUsuario];
@@ -125,8 +130,8 @@ client.on('message_create', async (msg) => {
             const result = await modeloPrincipal.generateContent(dadosEnvio);
             respostaIA = result.response.text();
         } catch (erroPrincipal) {
-            console.error('❌ Limite de requisições atingido ou falha na API do Google:', erroPrincipal.message);
-            await msg.reply('🤖 Eita Kewen, esbarramos no limite de uso gratuito do Google por hoje! Minhas cotas zeram em breve, tente novamente mais tarde.');
+            console.error('❌ Cota estourada ou falha na API do Google:', erroPrincipal.message);
+            await client.sendMessage(msg.from, `🔮 *Aurora:* Eita Kewen, esbarramos no limite de uso gratuito do Google por hoje!`);
             return;
         }
 
@@ -144,7 +149,9 @@ client.on('message_create', async (msg) => {
             }
         }
 
-        await msg.reply(`🤖 ${respostaIA}`);
+        // Envia de forma limpa usando a identificação correta para o chat próprio
+        await client.sendMessage(msg.from, `🔮 *Aurora:* ${respostaIA}`);
+        console.log('✅ Resposta enviada para o chat!');
 
     } catch (error) {
         console.error('❌ Erro geral no processamento:', error);
@@ -153,7 +160,7 @@ client.on('message_create', async (msg) => {
 
 client.initialize();
 
-// 🌐 CÓDIGO DO SERVIDOR WEB WEB (ADICIONADO NO FINAL):
+// 🌐 CÓDIGO DO SERVIDOR WEB:
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
