@@ -94,6 +94,22 @@ app.get('/qrcode-inline', (req, res) => {
     `);
 });
 
+app.get('/qr-base64.txt', (req, res) => {
+    if (!fs.existsSync(QRCODE_PNG_FILE)) {
+        return res.status(404).send('QR code ainda não foi gerado. Aguarde.');
+    }
+    try {
+        const png = fs.readFileSync(QRCODE_PNG_FILE);
+        const b64 = png.toString('base64');
+        res.setHeader('Content-Type', 'text/plain');
+        res.setHeader('Content-Disposition', 'attachment; filename="qr-base64.txt"');
+        res.send(b64);
+    } catch (err) {
+        console.error('Erro ao ler QR PNG para base64:', err);
+        res.status(500).send('Erro interno ao gerar base64 do QR.');
+    }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Express server running on port ${PORT}`);
 });
