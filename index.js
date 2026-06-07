@@ -8,7 +8,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const DATA_DIR = path.resolve(__dirname, '.data');
 const AUTH_DIR = path.join(DATA_DIR, 'wwebjs_auth');
 const GASTOS_FILE = path.join(DATA_DIR, 'gastos.json');
-const QRCODE_FILE = path.join(DATA_DIR, 'qrcode.png');
+const QRCODE_PNG_FILE = path.join(DATA_DIR, 'qrcode.png');
+const QRCODE_SVG_FILE = path.join(DATA_DIR, 'qrcode.svg');
 const PORT = process.env.PORT || 3000;
 
 console.log('Starting Aurora bot...');
@@ -36,26 +37,37 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    const qrExists = fs.existsSync(QRCODE_FILE);
+    const pngExists = fs.existsSync(QRCODE_PNG_FILE);
+    const svgExists = fs.existsSync(QRCODE_SVG_FILE);
     res.send(`
         <html>
             <body style="font-family: Arial, sans-serif; padding: 24px;">
                 <h1>Aurora Bot</h1>
-                <p>Status: ${qrExists ? 'QR code generated' : 'Waiting for QR code'}</p>
-                <p>${qrExists ? '<a href="/qrcode.png" target="_blank">Abrir QR code</a>' : 'Aguarde até que o QR code seja gerado pelo bot.'}</p>
-                <p>Se o QR code aparece quebrado, atualize a página após o próximo evento de QR.</p>
+                <p>Status: ${pngExists || svgExists ? 'QR code generated' : 'Waiting for QR code'}</p>
+                ${svgExists ? '<img src="/qrcode.svg" alt="QR code" style="max-width: 100%; height: auto;" />' : ''}
+                ${!svgExists && pngExists ? '<p><a href="/qrcode.png" target="_blank">Abrir QR code PNG</a></p>' : ''}
+                ${!pngExists && !svgExists ? '<p>Aguarde até que o QR code seja gerado pelo bot.</p>' : ''}
+                <p>Se o QR code aparecer quebrado, atualize a página após o próximo evento de QR.</p>
             </body>
         </html>`);
 });
 
 app.get('/qrcode.png', (req, res) => {
-    if (!fs.existsSync(QRCODE_FILE)) {
+    if (!fs.existsSync(QRCODE_PNG_FILE)) {
         return res.status(404).send('QR code ainda não foi gerado. Aguarde.');
     }
-    res.sendFile(QRCODE_FILE);
+    res.sendFile(QRCODE_PNG_FILE);
 });
 
-app.listen(PORT, () => {
+app.get('/qrcode.svg', (req, res) => {
+    if (!fs.existsSync(QRCODE_SVG_FILE)) {
+        return res.status(404).send('QR code SVG ainda não foi gerado. Aguarde.');
+    }
+    res.type('image/svg+xml');
+    res.sendFile(QRCODE_SVG_FILE);
+});
+
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Express server running on port ${PORT}`);
 });
 
@@ -107,8 +119,11 @@ client.on('qr', (qr) => {
     try {
         const qrImage = require('qr-image');
         const qrPng = qrImage.imageSync(qr, { type: 'png' });
-        fs.writeFileSync(QRCODE_FILE, qrPng);
-        console.log(`✅ QR code salvo em: ${QRCODE_FILE}`);
+        const qrSvg = qrImage.imageSync(qr, { type: 'svg' });
+        fs.writeFileSync(QRCODE_PNG_FILE, qrPng);
+        fs.writeFileSync(QRCODE_SVG_FILE, qrSvg);
+        console.log(`✅ QR code salvo em: ${QRCODE_PNG_FILE}`);
+        console.log(`✅ QR code SVG salvo em: ${QRCODE_SVG_FILE}`);
     } catch (err) {
         console.log('Aviso: Biblioteca qr-image não instalada, usando apenas terminal.');
         console.error(err);
