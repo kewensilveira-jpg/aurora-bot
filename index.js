@@ -12,10 +12,14 @@ const QRCODE_PNG_FILE = path.join(DATA_DIR, 'qrcode.png');
 const QRCODE_SVG_FILE = path.join(DATA_DIR, 'qrcode.svg');
 const PORT = process.env.PORT || 3000;
 
+const geminiApiKey = process.env.GEMINI_API_KEY;
 console.log('Starting Aurora bot...');
 console.log('Node env:', process.env.NODE_ENV);
 console.log('PORT:', PORT);
-console.log('GEMINI_API_KEY defined:', !!process.env.GEMINI_API_KEY);
+console.log('GEMINI_API_KEY defined:', !!geminiApiKey);
+if (!geminiApiKey) {
+    console.warn('Aviso: variável GEMINI_API_KEY não definida. A IA ficará desativada, mas o QR code ainda pode ser gerado.');
+}
 
 process.on('uncaughtException', (err) => {
     console.error('uncaughtException:', err);
@@ -84,8 +88,8 @@ if (!fs.existsSync(GASTOS_FILE) || fs.readFileSync(GASTOS_FILE, 'utf-8').trim() 
 }
 
 // 1. Configuração Otimizada da API do Gemini (Evita bloqueio do GitHub)
-const configIA = { apiKey: process.env.GEMINI_API_KEY };
-const ai = new GoogleGenerativeAI(configIA);
+const configIA = geminiApiKey ? { apiKey: geminiApiKey } : null;
+const ai = geminiApiKey ? new GoogleGenerativeAI(configIA) : null;
 
 // 2. Configuração do Cliente WhatsApp com travas de estabilidade e Memória RAM
 const client = new Client({
@@ -154,6 +158,11 @@ client.on('message', async (msg) => {
             if (msg.body.toLowerCase().startsWith('gasto') || msg.body.toLowerCase().startsWith('salvar')) {
                 fs.appendFileSync(GASTOS_FILE, `${new Date().toISOString()} - ${msg.body}\n`);
                 await msg.reply('🤖 Gasto anotado com sucesso no seu painel seguro!');
+                return;
+            }
+
+            if (!ai) {
+                await msg.reply('🤖 A variável GEMINI_API_KEY não está configurada no deploy. Configure-a para ativar as respostas da IA.');
                 return;
             }
 
