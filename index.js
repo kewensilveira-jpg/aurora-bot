@@ -21,6 +21,13 @@ if (!geminiApiKey) {
     console.warn('Aviso: variável GEMINI_API_KEY não definida. A IA ficará desativada, mas o QR code ainda pode ser gerado.');
 }
 
+// Garante que o diretório de dados exista antes de qualquer operação de I/O
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+if (!fs.existsSync(GASTOS_FILE) || fs.readFileSync(GASTOS_FILE, 'utf-8').trim() === "") {
+    fs.writeFileSync(GASTOS_FILE, JSON.stringify([], null, 2));
+}
+
 process.on('uncaughtException', (err) => {
     console.error('uncaughtException:', err);
 });
@@ -37,7 +44,8 @@ app.use((req, res, next) => {
 });
 
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', qr: fs.existsSync(QRCODE_FILE) ? 'generated' : 'pending' });
+    const qrGenerated = fs.existsSync(QRCODE_PNG_FILE) || fs.existsSync(QRCODE_SVG_FILE);
+    res.json({ status: 'ok', qr: qrGenerated ? 'generated' : 'pending' });
 });
 
 app.get('/', (req, res) => {
@@ -71,21 +79,24 @@ app.get('/qrcode.svg', (req, res) => {
     res.sendFile(QRCODE_SVG_FILE);
 });
 
+app.get('/qrcode-inline', (req, res) => {
+    if (!fs.existsSync(QRCODE_PNG_FILE)) {
+        return res.status(404).send('QR code ainda não foi gerado. Aguarde.');
+    }
+    const png = fs.readFileSync(QRCODE_PNG_FILE);
+    const b64 = png.toString('base64');
+    res.send(`
+        <html><body style="font-family: Arial, sans-serif; padding:24px;">
+            <h1>QR code (inline)</h1>
+            <p>Abra a imagem abaixo no seu celular e escaneie com o WhatsApp.</p>
+            <img src="data:image/png;base64,${b64}" alt="QR code" style="max-width:100%;height:auto;" />
+        </body></html>
+    `);
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Express server running on port ${PORT}`);
 });
-
-
-if (!process.env.GEMINI_API_KEY) {
-    console.error('Erro: variável GEMINI_API_KEY não definida. Defina no Railway ou no ambiente de deployment.');
-    process.exit(1);
-}
-
-fs.mkdirSync(DATA_DIR, { recursive: true });
-
-if (!fs.existsSync(GASTOS_FILE) || fs.readFileSync(GASTOS_FILE, 'utf-8').trim() === "") {
-    fs.writeFileSync(GASTOS_FILE, JSON.stringify([], null, 2));
-}
 
 // 1. Configuração Otimizada da API do Gemini (Evita bloqueio do GitHub)
 const configIA = geminiApiKey ? { apiKey: geminiApiKey } : null;
@@ -118,7 +129,8 @@ const client = new Client({
 // 3. Geração do QR Code nos logs da Railway
 client.on('qr', (qr) => {
     console.log('🤖 NOVO QR CODE GERADO...');
-    qrcode.generate(qr, { small: true });
+    // imprime QR no terminal (formato maior, mais legível)
+    qrcode.generate(qr, { small: false });
 
     try {
         const qrImage = require('qr-image');
@@ -128,6 +140,7 @@ client.on('qr', (qr) => {
         fs.writeFileSync(QRCODE_SVG_FILE, qrSvg);
         console.log(`✅ QR code salvo em: ${QRCODE_PNG_FILE}`);
         console.log(`✅ QR code SVG salvo em: ${QRCODE_SVG_FILE}`);
+        console.log(`🔗 Acesse /qrcode.png ou /qrcode.svg para abrir o QR no navegador.`);
     } catch (err) {
         console.log('Aviso: Biblioteca qr-image não instalada, usando apenas terminal.');
         console.error(err);
@@ -182,5 +195,9 @@ client.on('message', async (msg) => {
     }
 });
 
-// Inicializa o Bot
-client.initialize();
+// Inicializa o Bot (pode ser pulado em ambientes de teste definindo SKIP_WA=true)
+if (process.env.SKIP_WA === 'true') {
+    console.log('SKIP_WA=true -> pulando inicialização do cliente WhatsApp (teste de web server).');
+} else {
+    client.initialize();
+}
