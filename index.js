@@ -1,16 +1,32 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
-const { GoogleGenAI } = require('@google/genai');
+const path = require('path');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+const DATA_DIR = path.resolve(__dirname, '.data');
+const AUTH_DIR = path.join(DATA_DIR, 'wwebjs_auth');
+const GASTOS_FILE = path.join(DATA_DIR, 'gastos.json');
+
+if (!process.env.GEMINI_API_KEY) {
+    console.error('Erro: variável GEMINI_API_KEY não definida. Defina no Railway ou no ambiente de deployment.');
+    process.exit(1);
+}
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+if (!fs.existsSync(GASTOS_FILE) || fs.readFileSync(GASTOS_FILE, 'utf-8').trim() === "") {
+    fs.writeFileSync(GASTOS_FILE, JSON.stringify([], null, 2));
+}
 
 // 1. Configuração Otimizada da API do Gemini (Evita bloqueio do GitHub)
 const configIA = { apiKey: process.env.GEMINI_API_KEY };
-const ai = new GoogleGenAI(configIA);
+const ai = new GoogleGenerativeAI(configIA);
 
 // 2. Configuração do Cliente WhatsApp com travas de estabilidade e Memória RAM
 const client = new Client({
     authStrategy: new LocalAuth({
-        dataPath: '/.wwebjs_auth' // Caminho fixo do volume da Railway
+        dataPath: AUTH_DIR // Caminho gravável para Railway
     }),
     puppeteer: {
         headless: true,
@@ -68,7 +84,7 @@ client.on('message', async (msg) => {
 
             // Exemplo de sistema de gastos integrado ao arquivo local do volume
             if (msg.body.toLowerCase().startsWith('gasto') || msg.body.toLowerCase().startsWith('salvar')) {
-                fs.appendFileSync('/gastos.json', `${new Date().toISOString()} - ${msg.body}\n`);
+                fs.appendFileSync(GASTOS_FILE, `${new Date().toISOString()} - ${msg.body}\n`);
                 await msg.reply('🤖 Gasto anotado com sucesso no seu painel seguro!');
                 return;
             }
