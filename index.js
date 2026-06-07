@@ -4,7 +4,7 @@ const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // 🔑 Configuração da API do Gemini via Railway
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AQ.Ab8RN6JyG4-6CTW6W-HWTBq6H2HBkbp03L_MWEz-mZqkcysqSA';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
 const modeloPrincipal = ai.getGenerativeModel({ model: 'gemini-2.5-flash' }, { apiVersion: 'v1' });
 
