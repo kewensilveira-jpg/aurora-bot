@@ -11,6 +11,19 @@ const GASTOS_FILE = path.join(DATA_DIR, 'gastos.json');
 const QRCODE_FILE = path.join(DATA_DIR, 'qrcode.png');
 const PORT = process.env.PORT || 3000;
 
+console.log('Starting Aurora bot...');
+console.log('Node env:', process.env.NODE_ENV);
+console.log('PORT:', PORT);
+console.log('GEMINI_API_KEY defined:', !!process.env.GEMINI_API_KEY);
+
+process.on('uncaughtException', (err) => {
+    console.error('uncaughtException:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('unhandledRejection:', reason);
+});
+
 const app = express();
 
 app.get('/', (req, res) => {
