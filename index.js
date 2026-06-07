@@ -1,4 +1,4 @@
-// 🛠️ PROCESSAMENTO EM TEMPO REAL (BLINDAGEM TOTAL ANTI-INVASÃO)
+// 🛠️ PROCESSAMENTO EM TEMPO REAL (BLINDAGEM TOTAL E SEM ERROS)
 client.on('message_create', async (msg) => {
     
     // 1. Evita loops: Se a resposta começou com o prefixo da Aurora, ignora
@@ -7,12 +7,12 @@ client.on('message_create', async (msg) => {
     // 2. Só responde se a mensagem foi enviada por VOCÊ
     if (!msg.fromMe) return;
 
-    // 🔒 A TRAVA DE OURO: Descobre qual é o ID do seu próprio número dinamicamente
-    const meuProprioId = client.info.wid._serialized;
-
-    // Se o chat para onde você mandou a mensagem NÃO for o seu próprio chat privado, o bot morre aqui!
-    // Isso impede que ela se meta quando você estiver respondendo outras pessoas ou grupos.
-    if (msg.to !== meuProprioId) return;
+    // 🔒 TRAVA DEFINITIVA E ANTI-INVASÃO: 
+    // Só responde se o chat de destino (msg.to) contiver o seu número de telefone.
+    // Isso garante que ela só vai rodar na sua conversa privada com você mesmo!
+    // Se você estiver respondendo um amigo ou grupo, o "msg.to" será o ID deles, e o bot ignora.
+    const ehMeuChatPrivado = msg.to && msg.to.includes('555197984859');
+    if (!ehMeuChatPrivado) return;
 
     let textoUsuario = msg.body.trim();
     let conteudoParaIA = [];
@@ -35,7 +35,7 @@ client.on('message_create', async (msg) => {
 
     if (!textoUsuario && conteudoParaIA.length === 0) return;
 
-    console.log(`📡 Aurora ativada com segurança no seu chat privado pessoal!`);
+    console.log(`📡 Aurora processando no seu chat privado pessoal de forma ultra segura!`);
 
     try {
         const hoje = new Date().toLocaleDateString('pt-BR');
@@ -70,8 +70,8 @@ client.on('message_create', async (msg) => {
             }
         }
 
-        // Responde direto no seu chat privado
-        await client.sendMessage(meuProprioId, `🔮 *Aurora:* ${respostaIA}`);
+        // Responde exatamente no seu chat
+        await client.sendMessage(msg.to, `🔮 *Aurora:* ${respostaIA}`);
         console.log('✅ Resposta enviada apenas para o seu privado!');
 
     } catch (error) {
