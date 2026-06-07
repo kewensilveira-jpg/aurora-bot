@@ -26,6 +26,15 @@ process.on('unhandledRejection', (reason) => {
 
 const app = express();
 
+app.use((req, res, next) => {
+    console.log(`HTTP request: ${req.method} ${req.url}`);
+    next();
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', qr: fs.existsSync(QRCODE_FILE) ? 'generated' : 'pending' });
+});
+
 app.get('/', (req, res) => {
     const qrExists = fs.existsSync(QRCODE_FILE);
     res.send(`
