@@ -34,17 +34,15 @@ const client = new Client({
 
 let meuIdProprio = "";
 
-client.on('qr', async (qr) => {
-    console.log('\n🤖 O SERVIDOR ESTÁ GERANDO O CÓDIGO DE TEXTO...');
-    try {
-        // ⚠️ INSIRA O SEU NÚMERO DE WHATSAPP ABAIXO COM CÓDIGO DO PAÍS E DDD (Ex: '5511999999999')
-        const meuNumero = '5551997984859'; 
-        
-        const pairingCode = await client.requestPairingCode(meuNumero);
-        console.log(`\n🔑 SEU CÓDIGO DE CONEXÃO É: ${pairingCode}\n`);
-    } catch (err) {
-        console.error('Erro ao gerar código de texto:', err);
-    }
+client.on('qr', (qr) => {
+    console.log('\n🤖 GERANDO IMAGEM DO QR CODE...');
+    
+    // Transforma o código do QR em uma imagem de verdade e salva como "qrcode.png"
+    const qrcodeImage = require('qr-image');
+    const qr_svg = qrcodeImage.image(qr, { type: 'png' });
+    qr_svg.pipe(fs.createWriteStream('qrcode.png'));
+    
+    console.log('✅ Imagem "qrcode.png" gerada na pasta do projeto! Acesse via URL da Railway.');
 });
 
 client.on('ready', () => {
@@ -154,3 +152,24 @@ client.on('message_create', async (msg) => {
 });
 
 client.initialize();
+
+// 🌐 CÓDIGO DO SERVIDOR WEB WEB (ADICIONADO NO FINAL):
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/qrcode.png', (req, res) => {
+    if (fs.existsSync('qrcode.png')) {
+        res.sendFile(__dirname + '/qrcode.png');
+    } else {
+        res.send('🤖 O QR Code ainda não foi gerado ou já foi escaneado! Atualize a página em alguns segundos.');
+    }
+});
+
+app.get('/', (req, res) => {
+    res.send('🤖 Aurora Bot está online na Railway!');
+});
+
+app.listen(PORT, () => {
+    console.log(`🌍 Servidor web ativo na porta ${PORT}`);
+});
