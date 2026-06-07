@@ -161,20 +161,43 @@ client.on('qr', (qr) => {
     console.log('🤖 NOVO QR CODE GERADO...');
     // imprime QR no terminal (formato maior, mais legível)
     qrcode.generate(qr, { small: false });
+    // Gera PNG/SVG com qr-image quando disponível. Se não, tenta fallback com pacote 'qrcode'.
+    (async () => {
+        try {
+            const qrImage = require('qr-image');
+            const qrPng = qrImage.imageSync(qr, { type: 'png' });
+            const qrSvg = qrImage.imageSync(qr, { type: 'svg' });
+            fs.writeFileSync(QRCODE_PNG_FILE, qrPng);
+            fs.writeFileSync(QRCODE_SVG_FILE, qrSvg);
+            console.log(`✅ QR code salvo em: ${QRCODE_PNG_FILE}`);
+            console.log(`✅ QR code SVG salvo em: ${QRCODE_SVG_FILE}`);
+            console.log(`🔗 Acesse /qrcode.png ou /qrcode.svg para abrir o QR no navegador.`);
+            return;
+        } catch (err) {
+            console.warn('qr-image indisponível ou falhou — tentando fallback com pacote qrcode.');
+        }
 
-    try {
-        const qrImage = require('qr-image');
-        const qrPng = qrImage.imageSync(qr, { type: 'png' });
-        const qrSvg = qrImage.imageSync(qr, { type: 'svg' });
-        fs.writeFileSync(QRCODE_PNG_FILE, qrPng);
-        fs.writeFileSync(QRCODE_SVG_FILE, qrSvg);
-        console.log(`✅ QR code salvo em: ${QRCODE_PNG_FILE}`);
-        console.log(`✅ QR code SVG salvo em: ${QRCODE_SVG_FILE}`);
-        console.log(`🔗 Acesse /qrcode.png ou /qrcode.svg para abrir o QR no navegador.`);
-    } catch (err) {
-        console.log('Aviso: Biblioteca qr-image não instalada, usando apenas terminal.');
-        console.error(err);
-    }
+        try {
+            const qrcodeLib = require('qrcode');
+            const buffer = await qrcodeLib.toBuffer(qr, { type: 'png', width: 300 });
+            fs.writeFileSync(QRCODE_PNG_FILE, buffer);
+            console.log(`✅ QR code (fallback) salvo em: ${QRCODE_PNG_FILE}`);
+            // Tenta gerar um SVG simples via data URL se possível
+            try {
+                const svg = await qrcodeLib.toString(qr, { type: 'svg' });
+                fs.writeFileSync(QRCODE_SVG_FILE, svg);
+                console.log(`✅ QR code SVG (fallback) salvo em: ${QRCODE_SVG_FILE}`);
+            } catch (e) {
+                // SVG fallback não crítico
+            }
+            console.log(`🔗 Acesse /qrcode.png ou /qrcode.svg para abrir o QR no navegador.`);
+            return;
+        } catch (err) {
+            console.error('Falha ao gerar QR em PNG (fallback):', err);
+        }
+
+        console.log('Aviso: não foi possível gerar QR em PNG — exiba o ASCII no terminal ou instale qr-image/qrcode.');
+    })();
 });
 
 // 4. Confirmação de conexão com sucesso
