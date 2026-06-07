@@ -2,11 +2,41 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const DATA_DIR = path.resolve(__dirname, '.data');
 const AUTH_DIR = path.join(DATA_DIR, 'wwebjs_auth');
 const GASTOS_FILE = path.join(DATA_DIR, 'gastos.json');
+const QRCODE_FILE = path.join(DATA_DIR, 'qrcode.png');
+const PORT = process.env.PORT || 3000;
+
+const app = express();
+
+app.get('/', (req, res) => {
+    const qrExists = fs.existsSync(QRCODE_FILE);
+    res.send(`
+        <html>
+            <body style="font-family: Arial, sans-serif; padding: 24px;">
+                <h1>Aurora Bot</h1>
+                <p>Status: ${qrExists ? 'QR code generated' : 'Waiting for QR code'}</p>
+                <p>${qrExists ? '<a href="/qrcode.png" target="_blank">Abrir QR code</a>' : 'Aguarde até que o QR code seja gerado pelo bot.'}</p>
+                <p>Se o QR code aparece quebrado, atualize a página após o próximo evento de QR.</p>
+            </body>
+        </html>`);
+});
+
+app.get('/qrcode.png', (req, res) => {
+    if (!fs.existsSync(QRCODE_FILE)) {
+        return res.status(404).send('QR code ainda não foi gerado. Aguarde.');
+    }
+    res.sendFile(QRCODE_FILE);
+});
+
+app.listen(PORT, () => {
+    console.log(`Express server running on port ${PORT}`);
+});
+
 
 if (!process.env.GEMINI_API_KEY) {
     console.error('Erro: variável GEMINI_API_KEY não definida. Defina no Railway ou no ambiente de deployment.');
@@ -46,8 +76,6 @@ const client = new Client({
         }
     }
 });
-
-const QRCODE_FILE = path.join(DATA_DIR, 'qrcode.png');
 
 // 3. Geração do QR Code nos logs da Railway
 client.on('qr', (qr) => {
