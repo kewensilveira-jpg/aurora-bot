@@ -52,14 +52,14 @@ client.on('ready', () => {
 });
 
 client.on('message_create', async (msg) => {
-    // 1. Evita loops: Se a mensagem foi gerada pelo robô E começa com o cabeçalho dele, ignora!
+    // 1. Segurança Máxima: Só processa se a mensagem envolver o seu número no privado
+    if (msg.from !== '555197984859@c.us' && msg.to !== '555197984859@c.us') return;
+
+    // 2. Evita loops: Se a mensagem veio do próprio bot e já tem o cabeçalho dele, ignora
     if (msg.fromMe && msg.body.startsWith('🔮 *Aurora:*')) return;
 
-    // 2. Não responde em grupos para não misturar as coisas
+    // 3. Não responde em grupos para não misturar as coisas
     if (msg.from.endsWith('@g.us') || msg.to.endsWith('@g.us')) return;
-
-    // 3. Segurança: Só processa mensagens que envolvam o seu número
-    if (msg.from !== '555197984859@c.us' && msg.to !== '555197984859@c.us') return;
 
     let textoUsuario = msg.body.trim();
     let conteudoParaIA = [];
@@ -92,7 +92,6 @@ client.on('message_create', async (msg) => {
 
     if (!textoUsuario && conteudoParaIA.length === 0) return;
 
-    // Se quem enviou foi você no seu chat, o log vai registrar na hora!
     console.log(`📡 PROCESSANDO SUA MENSAGEM: "${textoUsuario || 'Mensagem de voz'}"`);
 
     try {
@@ -131,7 +130,8 @@ client.on('message_create', async (msg) => {
             respostaIA = result.response.text();
         } catch (erroPrincipal) {
             console.error('❌ Cota estourada ou falha na API do Google:', erroPrincipal.message);
-            await client.sendMessage(msg.from, `🔮 *Aurora:* Eita Kewen, esbarramos no limite de uso gratuito do Google por hoje!`);
+            const destinoErro = meuIdProprio || msg.from;
+            await client.sendMessage(destinoErro, `🔮 *Aurora:* Eita Kewen, esbarramos no limite de uso gratuito do Google por hoje!`);
             return;
         }
 
@@ -149,9 +149,10 @@ client.on('message_create', async (msg) => {
             }
         }
 
-        // Envia de forma limpa usando a identificação correta para o chat próprio
-        await client.sendMessage(msg.from, `🔮 *Aurora:* ${respostaIA}`);
-        console.log('✅ Resposta enviada para o chat!');
+        // 🔥 CORREÇÃO DA NUVEM: Envia direto para o seu ID próprio fixado, sem depender de conversa aberta
+        const destinoFinal = meuIdProprio || msg.from;
+        await client.sendMessage(destinoFinal, `🔮 *Aurora:* ${respostaIA}`);
+        console.log('✅ Resposta enviada para o seu chat próprio!');
 
     } catch (error) {
         console.error('❌ Erro geral no processamento:', error);
