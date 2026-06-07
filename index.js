@@ -36,7 +36,8 @@ let meuIdProprio = "";
 
 client.on('qr', (qr) => {
     console.log('\n🤖 ESCANEIE O QR CODE:\n');
-    qrcode.generate(qr, { small: true });
+    // Mudamos para false para os blocos se juntarem corretamente na Railway
+    qrcode.generate(qr, { small: false });
 });
 
 client.on('ready', () => {
