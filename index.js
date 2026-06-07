@@ -1,62 +1,23 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
-const fs = require('fs');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-// 🔑 Configuração da API do Gemini via Railway
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AQ.Ab8RN6JyG4-6CTW6W-HWTBq6H2HBkbp03L_MWEz-mZqkcysqSA';
-const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
-const modeloPrincipal = ai.getGenerativeModel({ model: 'gemini-2.5-flash' }, { apiVersion: 'v1' });
-
-// Garante que o arquivo de banco de dados dos gastos exista
-if (!fs.existsSync('gastos.json') || fs.readFileSync('gastos.json', 'utf-8').trim() === "") {
-    fs.writeFileSync('gastos.json', JSON.stringify([], null, 2));
-}
-
-// 📌 SEU ID EXATO IDENTIFICADO NO LOG
-const MEU_CHAT_PRIVADO = '555197984859@c.us';
-
-console.log(`🚀 Iniciando a Aurora FIXADA no seu chat privado: ${MEU_CHAT_PRIVADO}`);
-
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote'
-        ]
-    }
-});
-
-client.on('qr', (qr) => {
-    console.log('\n🤖 NOVO QR CODE GERADO...');
-    const qrcodeImage = require('qr-image');
-    const qr_svg = qrcodeImage.image(qr, { type: 'png' });
-    qr_svg.pipe(fs.createWriteStream('qrcode.png'));
-});
-
-client.on('ready', () => {
-    console.log(`\n🔒 [PRIVADO ATIVADO] Aurora rodando exclusivamente na sua conversa de número: ${MEU_CHAT_PRIVADO}`);
-});
-
-// 🛠️ PROCESSAMENTO EM TEMPO REAL
+// 🛠️ PROCESSAMENTO EM TEMPO REAL (BLINDAGEM TOTAL ANTI-INVASÃO)
 client.on('message_create', async (msg) => {
     
-    // 1. Evita loops: Se a resposta começou com o prefixo da Aurora, ignora para não responder infinitamente
+    // 1. Evita loops: Se a resposta começou com o prefixo da Aurora, ignora
     if (msg.fromMe && msg.body.startsWith('🔮 *Aurora:*')) return;
 
-    // 🔒 TRAVA DE OURO: Só aceita se o chat atual for estritamente o SEU chat privado
-    if (msg.from !== MEU_CHAT_PRIVADO) return;
+    // 2. Só responde se a mensagem foi enviada por VOCÊ
+    if (!msg.fromMe) return;
+
+    // 🔒 A TRAVA DE OURO: Descobre qual é o ID do seu próprio número dinamicamente
+    const meuProprioId = client.info.wid._serialized;
+
+    // Se o chat para onde você mandou a mensagem NÃO for o seu próprio chat privado, o bot morre aqui!
+    // Isso impede que ela se meta quando você estiver respondendo outras pessoas ou grupos.
+    if (msg.to !== meuProprioId) return;
 
     let textoUsuario = msg.body.trim();
     let conteudoParaIA = [];
 
-    // 🎙️ TRATAMENTO DE ÁUDIO ENVIADO POR VOCÊ
+    // 🎙️ TRATAMENTO DE ÁUDIO
     if (msg.hasMedia) {
         try {
             const media = await msg.downloadMedia();
@@ -74,7 +35,7 @@ client.on('message_create', async (msg) => {
 
     if (!textoUsuario && conteudoParaIA.length === 0) return;
 
-    console.log(`📡 Processando mensagem enviada por você: "${textoUsuario || 'Áudio'}"`);
+    console.log(`📡 Aurora ativada com segurança no seu chat privado pessoal!`);
 
     try {
         const hoje = new Date().toLocaleDateString('pt-BR');
@@ -95,7 +56,6 @@ client.on('message_create', async (msg) => {
         const result = await modeloPrincipal.generateContent(dadosEnvio);
         let respostaIA = result.response.text();
 
-        // Processa o salvamento do JSON se a IA identificar um gasto
         if (respostaIA.includes('JSON_GASTO')) {
             const partes = respostaIA.split('JSON_GASTO');
             respostaIA = partes[0].trim();
@@ -110,24 +70,11 @@ client.on('message_create', async (msg) => {
             }
         }
 
-        // Responde direto no seu chat
-        await client.sendMessage(MEU_CHAT_PRIVADO, `🔮 *Aurora:* ${respostaIA}`);
-        console.log('✅ Resposta enviada direto para o seu privado!');
+        // Responde direto no seu chat privado
+        await client.sendMessage(meuProprioId, `🔮 *Aurora:* ${respostaIA}`);
+        console.log('✅ Resposta enviada apenas para o seu privado!');
 
     } catch (error) {
         console.error('❌ Erro no processamento:', error);
     }
 });
-
-client.initialize();
-
-// SERVIDOR EXPRESS WEB (Apenas para manter o app online)
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/qrcode.png', (req, res) => {
-    if (fs.existsSync('qrcode.png')) res.sendFile(__dirname + '/qrcode.png');
-    else res.send('🤖 QR Code indisponível.');
-});
-app.get('/', (req, res) => res.send('🤖 Aurora Privada Ativa!'));
-app.listen(PORT);
