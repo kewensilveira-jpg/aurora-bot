@@ -2,7 +2,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const path = require('path');
-const { GoogleGenAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const DATA_DIR = path.resolve(__dirname, '.data');
 const AUTH_DIR = path.join(DATA_DIR, 'wwebjs_auth');
@@ -21,7 +21,7 @@ if (!fs.existsSync(GASTOS_FILE) || fs.readFileSync(GASTOS_FILE, 'utf-8').trim() 
 
 // 1. Configuração Otimizada da API do Gemini (Evita bloqueio do GitHub)
 const configIA = { apiKey: process.env.GEMINI_API_KEY };
-const ai = new GoogleGenAI(configIA);
+const ai = new GoogleGenerativeAI(configIA);
 
 // 2. Configuração do Cliente WhatsApp com travas de estabilidade e Memória RAM
 const client = new Client({
