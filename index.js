@@ -15,7 +15,7 @@ if (!fs.existsSync('gastos.json') || fs.readFileSync('gastos.json', 'utf-8').tri
     fs.writeFileSync('gastos.json', JSON.stringify([], null, 2));
 }
 
-console.log('🚀 Iniciando a Aurora (Versão Final de Produção)...');
+console.log('🚀 Iniciando a Aurora (Modo União e Descoberta de Logs)...');
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -51,111 +51,26 @@ client.on('ready', () => {
     console.log('✅ FORÇA TOTAL: AURORA PRONTA E PRONTINHA NO SEU CHAT!');
 });
 
+// 🛠️ BLOCO DE CAPTURA TOTAL ATIVADO
 client.on('message_create', async (msg) => {
-    // 1. Segurança Máxima: Só processa se a mensagem envolver o seu número no privado
-    if (msg.from !== '555197984859@c.us' && msg.to !== '555197984859@c.us') return;
+    // 🔍 SEU RADAR PRIVADO: Mostra no terminal absolutamente tudo o que passar pelo seu WhatsApp
+    console.log(`📡 MENSAGEM DETECTADA! De Chat ID: "${msg.from}" | Autor: "${msg.author || msg.from}" | Vinda de mim? ${msg.fromMe} | Texto: "${msg.body}"`);
 
-    // 2. Evita loops: Se a mensagem veio do próprio bot e já tem o cabeçalho dele, ignora
+    // Evita que o robô responda às suas próprias respostas e gere loops infinitos
     if (msg.fromMe && msg.body.startsWith('🔮 *Aurora:*')) return;
 
-    // 3. Não responde em grupos para não misturar as coisas
-    if (msg.from.endsWith('@g.us') || msg.to.endsWith('@g.us')) return;
+    let textoUsuario = msg.body.trim().toLowerCase();
+    if (!textoUsuario) return;
 
-    let textoUsuario = msg.body.trim();
-    let conteudoParaIA = [];
-
-    // 🎙️ TRATAMENTO DE ÁUDIO
-    if (msg.hasMedia) {
+    // 🎯 SE ELE PEGAR A PALAVRA "aurora", VAI ENVIAR UMA RESPOSTA FORÇADA DE TESTE
+    if (textoUsuario.includes('aurora')) {
         try {
-            console.log('📡 Baixando mídia privada...');
-            const media = await msg.downloadMedia();
-            
-            if (media && (media.mimetype.includes('audio') || media.mimetype.includes('ogg'))) {
-                console.log('🎙️ Áudio capturado! Formatando para a API...');
-                const mimePuro = media.mimetype.split(';')[0].trim();
-
-                conteudoParaIA.push({
-                    inlineData: {
-                        data: media.data,
-                        mimeType: mimePuro
-                    }
-                });
-                
-                if (!textoUsuario) {
-                    textoUsuario = "Analise o áudio enviado pelo usuário.";
-                }
-            }
-        } catch (erroMedia) {
-            console.error('❌ Erro ao processar o arquivo de áudio:', erroMedia);
+            console.log(`🔮 Tentando enviar resposta forçada para o Chat: ${msg.from}`);
+            await client.sendMessage(msg.from, `🔮 *Aurora:* Opa Kewen! Consegui interceptar sua mensagem! O ID deste chat é: ${msg.from}`);
+            console.log('✅ Resposta de teste disparada com sucesso!');
+        } catch (error) {
+            console.error('❌ Falha ao tentar responder de volta:', error.message);
         }
-    }
-
-    if (!textoUsuario && conteudoParaIA.length === 0) return;
-
-    console.log(`📡 PROCESSANDO SUA MENSAGEM: "${textoUsuario || 'Mensagem de voz'}"`);
-
-    try {
-        const hoje = new Date().toLocaleDateString('pt-BR');
-        
-        let dadosGastos = "[]";
-        try {
-            dadosGastos = fs.readFileSync('gastos.json', 'utf-8');
-            JSON.parse(dadosGastos);
-        } catch (e) {
-            console.log('⚠️ JSON inválido detectado. Resetando arquivo de gastos...');
-            fs.writeFileSync('gastos.json', JSON.stringify([], null, 2));
-            dadosGastos = "[]";
-        }
-        
-        const contextoPrompt = `
-        Você é a Aurora, assistente pessoal e gerenciadora de gastos do Kewen. Hoje é dia ${hoje}.
-        Histórico de gastos atual em formato JSON:
-        ${dadosGastos}
-        
-        Se houver um áudio anexado nas mídias, escute e processe o que foi dito. O usuário está falando por voz.
-        Se ele estiver informando um gasto (ex: "gastei 50 reais no mercado"), extraia as informações e adicione OBRIGATORIAMENTE no final da resposta a tag JSON_GASTO seguida do objeto exatamente assim: JSON_GASTO {"data": "${hoje}", "valor": X, "descricao": "Y"}.
-        Se for outra coisa, responda de forma curta, simpática e usando emojis.
-        `;
-
-        const dadosEnvio = [contextoPrompt, textoUsuario];
-        if (conteudoParaIA.length > 0) {
-            dadosEnvio.push(conteudoParaIA[0]);
-        }
-        
-        let respostaIA = "";
-
-        try {
-            console.log('🔮 Enviando dados para o Gemini 2.5-Flash...');
-            const result = await modeloPrincipal.generateContent(dadosEnvio);
-            respostaIA = result.response.text();
-        } catch (erroPrincipal) {
-            console.error('❌ Cota estourada ou falha na API do Google:', erroPrincipal.message);
-            const destinoErro = meuIdProprio || msg.from;
-            await client.sendMessage(destinoErro, `🔮 *Aurora:* Eita Kewen, esbarramos no limite de uso gratuito do Google por hoje!`);
-            return;
-        }
-
-        if (respostaIA.includes('JSON_GASTO')) {
-            const partes = respostaIA.split('JSON_GASTO');
-            respostaIA = partes[0].trim();
-            try {
-                const novoGasto = JSON.parse(partes[1].trim());
-                const listaAtual = JSON.parse(dadosGastos);
-                listaAtual.push(novoGasto);
-                fs.writeFileSync('gastos.json', JSON.stringify(listaAtual, null, 2));
-                respostaIA += '\n\n💾 _Gasto anotado!_';
-            } catch (err) {
-                console.log('Erro ao salvar JSON:', err);
-            }
-        }
-
-        // 🔥 CORREÇÃO DA NUVEM: Envia direto para o seu ID próprio fixado, sem depender de conversa aberta
-        const destinoFinal = meuIdProprio || msg.from;
-        await client.sendMessage(destinoFinal, `🔮 *Aurora:* ${respostaIA}`);
-        console.log('✅ Resposta enviada para o seu chat próprio!');
-
-    } catch (error) {
-        console.error('❌ Erro geral no processamento:', error);
     }
 });
 
