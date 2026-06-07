@@ -34,10 +34,17 @@ const client = new Client({
 
 let meuIdProprio = "";
 
-client.on('qr', (qr) => {
-    console.log('\n🤖 ESCANEIE O QR CODE:\n');
-    // Mudamos para false para os blocos se juntarem corretamente na Railway
-    qrcode.generate(qr, { small: false });
+client.on('qr', async (qr) => {
+    console.log('\n🤖 O SERVIDOR ESTÁ GERANDO O CÓDIGO DE TEXTO...');
+    try {
+        // ⚠️ INSIRA O SEU NÚMERO DE WHATSAPP ABAIXO COM CÓDIGO DO PAÍS E DDD (Ex: '5511999999999')
+        const meuNumero = '5551997984859'; 
+        
+        const pairingCode = await client.requestPairingCode(meuNumero);
+        console.log(`\n🔑 SEU CÓDIGO DE CONEXÃO É: ${pairingCode}\n`);
+    } catch (err) {
+        console.error('Erro ao gerar código de texto:', err);
+    }
 });
 
 client.on('ready', () => {
