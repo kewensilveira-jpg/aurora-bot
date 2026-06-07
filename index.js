@@ -3,7 +3,7 @@ const qrcode = require('qrcode-terminal');
 const fs = require('fs');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// 🔑 Configuração da API do Gemini via Railway
+// 🔑 Configuração segura da API via Railway
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
 const modeloPrincipal = ai.getGenerativeModel({ model: 'gemini-2.5-flash' }, { apiVersion: 'v1' });
@@ -39,24 +39,17 @@ client.on('ready', () => {
     console.log(`\n🔒 [PRIVADO ATIVADO] Aurora rodando de forma ultra segura no seu chat!`);
 });
 
-// 🛠️ PROCESSAMENTO EM TEMPO REAL (BLINDAGEM TOTAL E SEM ERROS)
+// 🛠️ PROCESSAMENTO EM TEMPO REAL
 client.on('message_create', async (msg) => {
-    
-    // 1. Evita loops: Se a resposta começou com o prefixo da Aurora, ignora
     if (msg.fromMe && msg.body.startsWith('🔮 *Aurora:*')) return;
-
-    // 2. Só responde se a mensagem foi enviada por VOCÊ
     if (!msg.fromMe) return;
 
-    // 🔒 TRAVA DEFINITIVA E ANTI-INVASÃO: 
-    // Só responde se o chat de destino (msg.to) contiver o seu número de telefone.
     const ehMeuChatPrivado = msg.to && msg.to.includes('555197984859');
     if (!ehMeuChatPrivado) return;
 
     let textoUsuario = msg.body.trim();
     let conteudoParaIA = [];
 
-    // 🎙️ TRATAMENTO DE ÁUDIO
     if (msg.hasMedia) {
         try {
             const media = await msg.downloadMedia();
@@ -74,7 +67,7 @@ client.on('message_create', async (msg) => {
 
     if (!textoUsuario && conteudoParaIA.length === 0) return;
 
-    console.log(`📡 Aurora processando no seu chat privado pessoal de forma ultra segura!`);
+    console.log(`📡 Aurora processando no seu chat privado pessoal!`);
 
     try {
         const hoje = new Date().toLocaleDateString('pt-BR');
@@ -85,8 +78,8 @@ client.on('message_create', async (msg) => {
         Histórico de gastos atual em formato JSON:
         ${dadosGastos}
         
-        Se ele estiver informando um gasto (ex: "gastei 50 reais"), adicione OBRIGATORIAMENTE no final da resposta a tag JSON_GASTO seguida do objeto exatamente assim: JSON_GASTO {"data": "${hoje}", "valor": X, "descricao": "Y"}.
-        Responda sempre de forma corta, prestativa e usando emojis.
+        Se ele estiver informando um gasto, adicione OBRIGATORIAMENTE no final da resposta a tag JSON_GASTO seguida do objeto assim: JSON_GASTO {"data": "${hoje}", "valor": X, "descricao": "Y"}.
+        Responda sempre de forma curta e usando emojis.
         `;
 
         const dadosEnvio = [contextoPrompt, textoUsuario];
@@ -109,7 +102,6 @@ client.on('message_create', async (msg) => {
             }
         }
 
-        // Responde exatamente no seu chat
         await client.sendMessage(msg.to, `🔮 *Aurora:* ${respostaIA}`);
         console.log('✅ Resposta enviada apenas para o seu privado!');
 
@@ -120,7 +112,7 @@ client.on('message_create', async (msg) => {
 
 client.initialize();
 
-// SERVIDOR EXPRESS WEB (Apenas para manter o app online)
+// SERVIDOR EXPRESS WEB (Totalmente limpo e sem chaves vazadas)
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
