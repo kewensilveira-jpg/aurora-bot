@@ -110,6 +110,20 @@ app.get('/qr-base64.txt', (req, res) => {
     }
 });
 
+app.get('/qr-dataurl.json', (req, res) => {
+    if (!fs.existsSync(QRCODE_PNG_FILE)) {
+        return res.status(404).json({ error: 'QR code ainda não foi gerado. Aguarde.' });
+    }
+    try {
+        const png = fs.readFileSync(QRCODE_PNG_FILE);
+        const b64 = png.toString('base64');
+        res.json({ dataUrl: `data:image/png;base64,${b64}` });
+    } catch (err) {
+        console.error('Erro ao ler QR PNG para data URL:', err);
+        res.status(500).json({ error: 'Erro interno ao gerar data URL do QR.' });
+    }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Express server running on port ${PORT}`);
 });
