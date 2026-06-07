@@ -47,18 +47,21 @@ const client = new Client({
     }
 });
 
+const QRCODE_FILE = path.join(DATA_DIR, 'qrcode.png');
+
 // 3. Geração do QR Code nos logs da Railway
 client.on('qr', (qr) => {
     console.log('🤖 NOVO QR CODE GERADO...');
     qrcode.generate(qr, { small: true });
-    
-    // Cria a imagem qrcode.png para você acessar via link no navegador
+
     try {
         const qrImage = require('qr-image');
-        const qr_svg = qrImage.image(qr, { type: 'png' });
-        qr_svg.pipe(fs.createWriteStream('qrcode.png'));
+        const qrPng = qrImage.imageSync(qr, { type: 'png' });
+        fs.writeFileSync(QRCODE_FILE, qrPng);
+        console.log(`✅ QR code salvo em: ${QRCODE_FILE}`);
     } catch (err) {
         console.log('Aviso: Biblioteca qr-image não instalada, usando apenas terminal.');
+        console.error(err);
     }
 });
 
