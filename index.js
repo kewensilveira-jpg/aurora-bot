@@ -10,7 +10,7 @@ const AUTH_DIR = path.join(DATA_DIR, 'wwebjs_auth');
 const GASTOS_FILE = path.join(DATA_DIR, 'gastos.json');
 const QRCODE_PNG_FILE = path.join(DATA_DIR, 'qrcode.png');
 const QRCODE_SVG_FILE = path.join(DATA_DIR, 'qrcode.svg');
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 const geminiApiKey = process.env.GEMINI_API_KEY;
 console.log('Starting Aurora bot...');
