@@ -1,20 +1,17 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 
-// 🔑 Configuração da API do Gemini via Railway
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AQ.Ab8RN6JyG4-6CTW6W-HWTBq6H2HBkbp03L_MWEz-mZqkcysqSA';
-const ai = new GoogleGenerativeAI(GEMINI_API_KEY);
-const modeloPrincipal = ai.getGenerativeModel({ model: 'gemini-2.5-flash' }, { apiVersion: 'v1' });
+// 1. Configuração Otimizada da API do Gemini (Evita bloqueio do GitHub)
+const configIA = { apiKey: process.env.GEMINI_API_KEY };
+const ai = new GoogleGenAI(configIA);
 
-// Garante que o arquivo de banco de dados dos gastos exista
-if (!fs.existsSync('gastos.json') || fs.readFileSync('gastos.json', 'utf-8').trim() === "") {
-    fs.writeFileSync('gastos.json', JSON.stringify([], null, 2));
-}
-
+// 2. Configuração do Cliente WhatsApp com travas de estabilidade e Memória RAM
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({
+        dataPath: '/.wwebjs_auth' // Caminho fixo do volume da Railway
+    }),
     puppeteer: {
         headless: true,
         args: [
@@ -23,110 +20,74 @@ const client = new Client({
             '--disable-dev-shm-usage',
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
-            '--no-zygote'
-        ]
+            '--no-zygote',
+            '--single-process' // Economiza RAM no servidor da Railway
+        ],
+        // Corrige o erro "Execution context was destroyed" forçando uma versão estável
+        webVersionCache: {
+            type: 'remote',
+            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
+        }
     }
 });
 
+// 3. Geração do QR Code nos logs da Railway
 client.on('qr', (qr) => {
-    console.log('\n🤖 NOVO QR CODE GERADO...');
-    const qrcodeImage = require('qr-image');
-    const qr_svg = qrcodeImage.image(qr, { type: 'png' });
-    qr_svg.pipe(fs.createWriteStream('qrcode.png'));
-});
-
-client.on('ready', () => {
-    console.log(`\n🔒 [PRIVADO ATIVADO] Aurora rodando de forma ultra segura no seu chat!`);
-});
-
-// 🛠️ PROCESSAMENTO EM TEMPO REAL (BLINDAGEM TOTAL E SEM ERROS)
-client.on('message_create', async (msg) => {
+    console.log('🤖 NOVO QR CODE GERADO...');
+    qrcode.generate(qr, { small: true });
     
-    // 1. Evita loops: Se a resposta começou com o prefixo da Aurora, ignora
-    if (msg.fromMe && msg.body.startsWith('🔮 *Aurora:*')) return;
-
-    // 2. Só responde se a mensagem foi enviada por VOCÊ
-    if (!msg.fromMe) return;
-
-    // 🔒 TRAVA DEFINITIVA E ANTI-INVASÃO: 
-    // Só responde se o chat de destino (msg.to) contiver o seu número de telefone.
-    const ehMeuChatPrivado = msg.to && msg.to.includes('555197984859');
-    if (!ehMeuChatPrivado) return;
-
-    let textoUsuario = msg.body.trim();
-    let conteudoParaIA = [];
-
-    // 🎙️ TRATAMENTO DE ÁUDIO
-    if (msg.hasMedia) {
-        try {
-            const media = await msg.downloadMedia();
-            if (media && (media.mimetype.includes('audio') || media.mimetype.includes('ogg'))) {
-                const mimePuro = media.mimetype.split(';')[0].trim();
-                conteudoParaIA.push({
-                    inlineData: { data: media.data, mimeType: mimePuro }
-                });
-                if (!textoUsuario) textoUsuario = "Analise o áudio enviado pelo usuário.";
-            }
-        } catch (erroMedia) {
-            console.error('❌ Erro no áudio:', erroMedia);
-        }
-    }
-
-    if (!textoUsuario && conteudoParaIA.length === 0) return;
-
-    console.log(`📡 Aurora processando no seu chat privado pessoal de forma ultra segura!`);
-
+    // Cria a imagem qrcode.png para você acessar via link no navegador
     try {
-        const hoje = new Date().toLocaleDateString('pt-BR');
-        let dadosGastos = fs.readFileSync('gastos.json', 'utf-8');
-        
-        const contextoPrompt = `
-        Você é a Aurora, assistente pessoal e gerenciadora de gastos do Kewen. Hoje é dia ${hoje}.
-        Histórico de gastos atual em formato JSON:
-        ${dadosGastos}
-        
-        Se ele estiver informando um gasto (ex: "gastei 50 reais"), adicione OBRIGATORIAMENTE no final da resposta a tag JSON_GASTO seguida do objeto exatamente assim: JSON_GASTO {"data": "${hoje}", "valor": X, "descricao": "Y"}.
-        Responda sempre de forma corta, prestativa e usando emojis.
-        `;
-
-        const dadosEnvio = [contextoPrompt, textoUsuario];
-        if (conteudoParaIA.length > 0) dadosEnvio.push(conteudoParaIA[0]);
-        
-        const result = await modeloPrincipal.generateContent(dadosEnvio);
-        let respostaIA = result.response.text();
-
-        if (respostaIA.includes('JSON_GASTO')) {
-            const partes = respostaIA.split('JSON_GASTO');
-            respostaIA = partes[0].trim();
-            try {
-                const novoGasto = JSON.parse(partes[1].trim());
-                const listaAtual = JSON.parse(dadosGastos);
-                listaAtual.push(novoGasto);
-                fs.writeFileSync('gastos.json', JSON.stringify(listaAtual, null, 2));
-                respostaIA += '\n\n💾 _Gasto anotado no seu sistema!_';
-            } catch (err) {
-                console.log('Erro ao salvar JSON:', err);
-            }
-        }
-
-        // Responde exatamente no seu chat
-        await client.sendMessage(msg.to, `🔮 *Aurora:* ${respostaIA}`);
-        console.log('✅ Resposta enviada apenas para o seu privado!');
-
-    } catch (error) {
-        console.error('❌ Erro no processamento:', error);
+        const qrImage = require('qr-image');
+        const qr_svg = qrImage.image(qr, { type: 'png' });
+        qr_svg.pipe(fs.createWriteStream('qrcode.png'));
+    } catch (err) {
+        console.log('Aviso: Biblioteca qr-image não instalada, usando apenas terminal.');
     }
 });
 
-client.initialize();
-
-// SERVIDOR EXPRESS WEB (Apenas para manter o app online)
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/qrcode.png', (req, res) => {
-    if (fs.existsSync('qrcode.png')) res.sendFile(__dirname + '/qrcode.png');
-    else res.send('🤖 QR Code indisponível.');
+// 4. Confirmação de conexão com sucesso
+client.on('ready', () => {
+    console.log('🔒 [PRIVADO ATIVADO] Aurora rodando de forma ultra segura no seu chat!');
 });
-app.get('/', (req, res) => res.send('🤖 Aurora Privada Ativa!'));
-app.listen(PORT);
+
+// 5. Lógica de Mensagens (Foco no Chat Privado consigo mesmo)
+client.on('message', async (msg) => {
+    const chat = await msg.getChat();
+    const deMim = msg.fromMe;
+    const meuNumero = client.info.wid._serialized;
+
+    // Filtro de Segurança: Responde APENAS no chat privado com seu próprio número
+    if (msg.from === meuNumero || chat.id._serialized === meuNumero) {
+        
+        // Evita loops infinitos de respostas
+        if (deMim && msg.body.startsWith('🤖')) return;
+
+        try {
+            console.log(`📩 Mensagem recebida no privado: ${msg.body}`);
+
+            // Exemplo de sistema de gastos integrado ao arquivo local do volume
+            if (msg.body.toLowerCase().startsWith('gasto') || msg.body.toLowerCase().startsWith('salvar')) {
+                fs.appendFileSync('/gastos.json', `${new Date().toISOString()} - ${msg.body}\n`);
+                await msg.reply('🤖 Gasto anotado com sucesso no seu painel seguro!');
+                return;
+            }
+
+            // Envia a mensagem para a IA do Gemini responder
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: msg.body,
+            });
+
+            // Responde no WhatsApp com a inteligência do Gemini
+            await msg.reply(`🤖 ${response.text}`);
+
+        } catch (error) {
+            console.error('❌ Erro ao processar mensagem ou chamar a IA:', error);
+            await msg.reply('🤖 Desculpe, tive um probleminha técnico para processar essa mensagem agora.');
+        }
+    }
+});
+
+// Inicializa o Bot
+client.initialize();
