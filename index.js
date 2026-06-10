@@ -1,3 +1,7 @@
+// ====================================================================
+// 1. IMPORTAÇÕES E CONFIGURAÇÕES INICIAIS
+// ====================================================================
+const { GoogleGenAI } = require('@google/genai');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const qrcode = require('qrcode');
@@ -8,10 +12,10 @@ const port = process.env.PORT || 8080;
 let latestQr = null;
 let botStatus = 'Aguardando leitura do QR Code...';
 
-// Inicializa a IA usando a chave que está na Railway
-const { GoogleGenAI } = require('@google/genai');
+// Inicializa a IA buscando a chave do cofre seguro da Railway
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+// Configuração otimizada do navegador invisível para servidores Linux (Railway)
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -35,7 +39,9 @@ const client = new Client({
 
 client.initialize();
 
-// ==================== EVENTOS DO WHATSAPP ====================
+// ====================================================================
+// 2. TRATAMENTO DE EVENTOS DO WHATSAPP
+// ====================================================================
 
 client.on('qr', (qr) => {
     latestQr = qr;
@@ -46,7 +52,7 @@ client.on('qr', (qr) => {
 client.on('ready', () => {
     latestQr = null;
     botStatus = '🔒 [PRIVADO ATIVADO] Aurora rodando de forma ultra segura no seu chat!';
-    console.log('✅ [AURORA] Client is ready! Bot totalmente conectado.');
+    console.log('✅ [AURORA] O cliente está pronto e totalmente conectado.');
 });
 
 client.on('authenticated', () => {
@@ -64,12 +70,14 @@ client.on('disconnected', (reason) => {
     client.initialize();
 });
 
-// ==================== FUNÇÃO DO CÉREBRO (GEMINI) ====================
+// ====================================================================
+// 3. INTEGRAÇÃO INTELIGENTE COM O GEMINI (SISTEMA DE CONTINGÊNCIA)
+// ====================================================================
 
 async function perguntarAoGemini(pergunta) {
     const systemInstruction = "Você é a Aurora, uma assistente virtual inteligente, prestativa e objetiva. Responda de forma natural.";
     try {
-        console.log('⚡ [SETOR 1] Tentando com Gemini 2.5 Flash...');
+        console.log('⚡ [SETOR 1] Acionando inteligência principal (Gemini 2.5 Flash)...');
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: pergunta,
@@ -77,9 +85,9 @@ async function perguntarAoGemini(pergunta) {
         });
         return response.text;
     } catch (errorFirstSector) {
-        console.error('⚠️ [SETOR 1 FALHOU] Acionando Setor 2...', errorFirstSector);
+        console.error('⚠️ [SETOR 1 FALHOU] Acionando Setor de Contingência 2...', errorFirstSector);
         try {
-            console.log('🔥 [SETOR 2] Tentando com Gemini 2.5 Pro...');
+            console.log('🔥 [SETOR 2] Carregando modelo avançado de backup (Gemini 2.5 Pro)...');
             const responseBackup = await ai.models.generateContent({
                 model: 'gemini-2.5-pro',
                 contents: pergunta,
@@ -87,17 +95,21 @@ async function perguntarAoGemini(pergunta) {
             });
             return responseBackup.text;
         } catch (errorSecondSector) {
-            console.error('❌ [CRÍTICO] Ambos os setores falharam:', errorSecondSector);
-            return '🤖 Meus dois setores de inteligência falharam no momento.';
+            console.error('❌ [CRÍTICO] Ambos os setores de inteligência falharam:', errorSecondSector);
+            return '🤖 Desculpe, meus dois setores de inteligência estão temporariamente indisponíveis no momento.';
         }
     }
 }
 
-// ==================== LÓGICA DE RESPOSTA ====================
+// ====================================================================
+// 4. FILTRO DE PRIVACIDADE E PROCESSAMENTO DE MENSAGENS (DDD 51)
+// ====================================================================
 
 client.on('message_create', async (msg) => {
     try {
         const chat = await msg.getChat();
+        
+        // Garante que o robô responda APENAS ao seu número privado (com ou sem o 9 extra no sistema do WhatsApp)
         const ehMensagemDoKewen = 
             msg.fromMe || 
             msg.id.fromMe ||
@@ -110,6 +122,8 @@ client.on('message_create', async (msg) => {
         if (!msg.body) return;
 
         const textoMensagem = msg.body.trim();
+        
+        // Evita loops infinitos onde o robô tenta responder a si próprio
         if (textoMensagem.startsWith('🤖')) return;
 
         console.log(`💬 [PROCESSANDO]: "${textoMensagem}"`);
@@ -120,35 +134,38 @@ client.on('message_create', async (msg) => {
     }
 });
 
-// ==================== SERVIDOR WEB (EXPRESS) ====================
+// ====================================================================
+// 5. SERVIDOR WEB INTERNO (INTERFACE DE STATUS E QR CODE)
+// ====================================================================
 
-// Rota principal de Status (10 minutos estável)
+// Rota Principal: Exibe o status atual com o temporizador estável de 10 minutos (600s)
 app.get('/', async (req, res) => {
     res.send(`
         <html>
             <head>
                 <meta http-equiv="refresh" content="600">
-                <title>Aurora Bot - Status</title>
+                <title>Aurora Bot - Painel de Controle</title>
                 <style>
                     body { font-family: Arial, sans-serif; text-align: center; background-color: #111; color: #fff; padding-top: 50px; }
-                    .status { font-size: 1.2em; color: #00ffcc; font-weight: bold; }
-                    a { color: #00ffcc; text-decoration: none; border: 1px solid #00ffcc; padding: 10px; border-radius: 5px; }
+                    .status { font-size: 1.3em; color: #00ffcc; font-weight: bold; margin-bottom: 35px; }
+                    .btn { color: #111; background-color: #00ffcc; text-decoration: none; padding: 12px 25px; border-radius: 5px; font-weight: bold; font-size: 1.1em; transition: 0.3s; }
+                    .btn:hover { background-color: #00ccaa; }
                 </style>
             </head>
             <body>
-                <h1>🤖 Aurora Bot Status</h1>
+                <h1>🤖 Painel de Status - Aurora Bot</h1>
                 <p class="status">${botStatus}</p>
-                <br><br>
-                ${latestQr ? '<a href="/qr" target="_blank">Clique aqui para abrir o QR Code em PNG</a>' : ''}
+                <br>
+                ${latestQr ? '<a class="btn" href="/qr" target="_blank">Abrir imagem do QR Code (.PNG)</a>' : ''}
             </body>
         </html>
     `);
 });
 
-// O LINK DO PNG QUE VOCÊ QUERIA (Gera a imagem limpa na tela)
+// Rota PNG Privada: Transforma a string do WhatsApp em uma imagem limpa diretamente na tela
 app.get('/qr', async (req, res) => {
     if (!latestQr) {
-        res.status(404).send('Nenhum QR Code disponível no momento ou o bot já está conectado. Volte à página inicial.');
+        res.status(404).send('Nenhum QR Code disponível. Se o robô já foi conectado ao celular, volte à página principal.');
         return;
     }
     try {
@@ -159,10 +176,11 @@ app.get('/qr', async (req, res) => {
         });
         res.end(qrImageBuffer);
     } catch (err) {
-        res.status(500).send('Erro ao gerar o arquivo PNG do QR Code.');
+        res.status(500).send('Erro interno ao tentar processar a imagem do QR Code.');
     }
 });
 
+// Inicia o servidor escutando o IP público obrigatório da Railway
 app.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 Express server running on port ${port}`);
+    console.log(`🚀 Servidor Express operando perfeitamente na porta ${port}`);
 });
