@@ -81,7 +81,7 @@ app.get('/', (req, res) => {
                         <img src="${qrAppUrl}" alt="QR Code WhatsApp" style="border: 4px solid #333; border-radius: 8px; width: 250px; height: 250px;" />
                     </div>
                     
-                    <p style="font-size: 14px; color: #555; line-height: 1.4;">Abra o WhatsApp no seu celular, vá em <b>Aparelhos Conectados</b> > <b>Conectar um aparelho</b> e aponte a câmera para a imagem acima.</p>
+                    <p style="font-size: 14px; color: #555; line-height: 1.4;">Abra o WhatsApp no seu celular, vai em <b>Aparelhos Conectados</b> > <b>Conectar um aparelho</b> e aponte a câmera para a imagem acima.</p>
                     <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
                     <p style="font-size: 12px; color: #999;">O painel recarrega automaticamente caso o QR Code expire.</p>
                 </div>
@@ -123,7 +123,7 @@ const client = new Client({
             '--no-first-run',
             '--no-zygote',
             '--single-process',
-            '--disable-gpu' // Evita erros gráficos em ambientes headless
+            '--disable-gpu'
         ],
         handleSIGINT: false,
         handleSIGTERM: false
@@ -136,7 +136,6 @@ client.on('qr', async (qr) => {
     
     rawQrCodeString = qr;
 
-    // Exibe no terminal em formato reduzido por garantia
     qrcode.generate(qr, { small: true });
 
     try {
@@ -156,51 +155,63 @@ client.on('qr', async (qr) => {
 
 client.on('ready', () => {
     console.log('🔒 [PRIVADO ATIVADO] Aurora rodando de forma ultra segura no seu chat!');
-    rawQrCodeString = null; // Remove o QR Code da tela já que conectou com sucesso
+    rawQrCodeString = null;
 });
 
-// LÓGICA DE PRIVACIDADE EXCLUSIVA: Responde apenas você mesmo no chat privado
+// LÓGICA DE PRIVACIDADE EXCLUSIVA: Responde apenas ao Kewen
 client.on('message', async (msg) => {
-    const chat = await msg.getChat();
-    const deMim = msg.fromMe;
-    const meuNumero = client.info.wid._serialized;
-
-    // Filtro Reforçado: O bot só aceita mensagens enviadas de você para você mesmo
-    if (msg.from === meuNumero || chat.id._serialized === meuNumero) {
+    try {
+        const chat = await msg.getChat();
         
-        // Evita loops caso o bot tente responder a si mesmo
-        if (deMim && msg.body.startsWith('🤖')) return;
+        // O número do Kewen formatado como o WhatsApp trata internamente
+        const numeroKewen = '51997984859@c.us';
+        const numeroKewenSemNono = '5197984859@c.us'; // Backup de segurança para caso o WhatsApp oculte o 9
 
-        try {
-            console.log(`📩 Mensagem sua recebida no chat privado: ${msg.body}`);
+        // Verifica minuciosamente se a mensagem veio do Kewen ou se é o chat privado dele
+        const ehMensagemDoKewen = 
+            msg.fromMe || 
+            msg.from === numeroKewen || 
+            msg.from === numeroKewenSemNono ||
+            chat.id._serialized === numeroKewen ||
+            chat.id._serialized === numeroKewenSemNono;
 
-            // Comando de gastos integrado ao banco de dados do Volume
-            if (msg.body.toLowerCase().startsWith('gasto') || msg.body.toLowerCase().startsWith('salvar')) {
-                fs.appendFileSync(GASTOS_FILE, `${new Date().toISOString()} - ${msg.body}\n`);
-                await msg.reply('🤖 Gasto anotado com sucesso no seu painel seguro do Volume!');
-                return;
-            }
+        // 🔥 FILTRO DE PRIVACIDADE: Se não for o Kewen, ignora na hora!
+        if (!ehMensagemDoKewen) {
+            return; 
+        }
 
-            if (!ai) {
-                await msg.reply('🤖 A variável GEMINI_API_KEY não está configurada no deploy da Railway. Insira ela para falar com a IA.');
-                return;
-            }
+        // Evita loops (robô respondendo robô)
+        if (msg.body.startsWith('🤖')) return;
 
-            // Envia a mensagem para o cérebro do Gemini
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: msg.body,
-            });
+        console.log(`📩 [AURORA PRIVADO] Mensagem do Kewen processada: "${msg.body}"`);
 
-            // Responde de volta na sua conversa privada
-            await msg.reply(`🤖 ${response.text}`);
+        // Comando de gastos integrado ao banco de dados do Volume
+        if (msg.body.toLowerCase().startsWith('gasto') || msg.body.toLowerCase().startsWith('salvar')) {
+            fs.appendFileSync(GASTOS_FILE, `${new Date().toISOString()} - ${msg.body}\n`);
+            await msg.reply('🤖 Gasto anotado com sucesso no seu painel seguro do Volume!');
+            return;
+        }
 
-        } catch (error) {
-            console.error('❌ Erro no processamento da IA:', error);
+        if (!ai) {
+            await msg.reply('🤖 A variável GEMINI_API_KEY não está configurada no deploy da Railway. Insira ela para falar com a IA.');
+            return;
+        }
+
+        // Envia a mensagem para o cérebro do Gemini 2.5 Flash
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: msg.body,
+        });
+
+        // Responde de volta na sua conversa privada
+        await msg.reply(`🤖 ${response.text}`);
+
+    } catch (error) {
+        console.error('❌ Erro no processamento da mensagem:', error);
+        if (msg.fromMe || msg.from.includes('51997984859') || msg.from.includes('5197984859')) {
             await msg.reply('🤖 Desculpe, tive um probleminha técnico para processar essa mensagem agora.');
         }
     }
-    // Qualquer mensagem de terceiros cai aqui e é ignorada silenciosamente!
 });
 
 if (process.env.SKIP_WA === 'true') {
