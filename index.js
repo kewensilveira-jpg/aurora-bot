@@ -1,13 +1,16 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const qrcode = require('qrcode');
-const path = require('path');
+const { GoogleGenAI } = require('@google/genai'); // Nova biblioteca oficial do Gemini
 
 const app = express();
 const port = process.env.PORT || 8080;
 
 let latestQr = null;
 let botStatus = 'Aguardando leitura do QR Code...';
+
+// Inicializa a IA usando a chave que vamos colocar na Railway
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -61,14 +64,46 @@ client.on('disconnected', (reason) => {
     client.initialize();
 });
 
+// ==================== FUNÇÃO DO CÉREBRO (GEMINI COM DOIS SETORES) ====================
+
+async function perguntarAoGemini(pergunta) {
+    // Instrução de personalidade da Aurora
+    const systemInstruction = "Você é a Aurora, uma assistente virtual inteligente, prestativa e objetiva. Responda de forma natural.";
+
+    try {
+        console.log('⚡ [SETOR 1] Tentando resposta com Gemini 2.5 Flash...');
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash', // Setor 1: Principal e rápido
+            contents: pergunta,
+            config: { systemInstruction }
+        });
+        return response.text;
+
+    } catch (errorFirstSector) {
+        console.error('⚠️ [SETOR 1 FALHOU] Erro no Gemini Flash. Acionando Setor 2 Reserva...', errorFirstSector);
+        
+        try {
+            console.log('🔥 [SETOR 2] Tentando resposta com Gemini 2.5 Pro...');
+            const responseBackup = await ai.models.generateContent({
+                model: 'gemini-2.5-pro', // Setor 2: Reserva robusta
+                contents: pergunta,
+                config: { systemInstruction }
+            });
+            return responseBackup.text;
+
+        } catch (errorSecondSector) {
+            console.error('❌ [CRÍTICO] Ambos os setores do Gemini falharam:', errorSecondSector);
+            return '🤖 Desculpe Kewen, meus dois setores de inteligência (Gemini Flash e Pro) estão instáveis ou fora do ar no momento.';
+        }
+    }
+}
+
 // ==================== LÓGICA DE PRIVACIDADE E RESPOSTA ====================
 
-// Usando 'message_create' para capturar o que você digita na conversa com você mesmo
 client.on('message_create', async (msg) => {
     try {
         const chat = await msg.getChat();
         
-        // Validação do seu número (DDD 51 com e sem o nono dígito)
         const ehMensagemDoKewen = 
             msg.fromMe || 
             msg.id.fromMe ||
@@ -77,7 +112,6 @@ client.on('message_create', async (msg) => {
             msg.from.includes('51997984859') ||
             msg.from.includes('5197984859');
 
-        // Segurança: Se não for você no seu chat privado, ignora para não responder mais ninguém
         if (!ehMensagemDoKewen) {
             return;
         }
@@ -85,14 +119,17 @@ client.on('message_create', async (msg) => {
         if (!msg.body) return;
 
         const textoMensagem = msg.body.trim();
-        console.log(`💬 [DEBUG LOG] Mensagem sua detectada: "${textoMensagem}"`);
-
-        // Evita que o bot responda a si mesmo e entre em loop infinito
+        
+        // Evita que ela responda a si mesma
         if (textoMensagem.startsWith('🤖')) return;
 
-        // --- RESPOSTA PARA QUALQUER MENSAGEM ---
-        // Não importa o que você digitar, ela vai ler e responder aqui embaixo:
-        await msg.reply(`🤖 Entendido, Kewen! Você disse: "${textoMensagem}". Meu motor recebeu seu comando e está pronto.`);
+        console.log(`💬 [PROCESSANDO] Enviando para a IA: "${textoMensagem}"`);
+
+        // Chama a inteligência do Gemini
+        const respostaDaIA = await perguntarAoGemini(textoMensagem);
+
+        // Responde no WhatsApp com a resposta da IA
+        await msg.reply(`🤖 ${respostaDaIA}`);
 
     } catch (error) {
         console.error('❌ [ERRO NO PROCESSAMENTO]:', error);
@@ -106,7 +143,7 @@ app.get('/', async (req, res) => {
         res.send(`
             <html>
                 <head>
-                    <meta http-equiv="refresh" content="10">
+                    <meta http-equiv="refresh" content="600">
                     <title>Aurora Bot - Status</title>
                     <style>
                         body { font-family: Arial, sans-serif; text-align: center; background-color: #111; color: #fff; padding-top: 50px; }
