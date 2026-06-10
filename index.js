@@ -52,7 +52,7 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', qr: qrGenerated ? 'generated' : 'pending' });
 });
 
-// Painel web otimizado que gera o QR Code limpo sem bugar pixels
+// Painel web otimizado - Tempo ajustado para 60 segundos (Evita sobrecarga no deploy)
 app.get('/', (req, res) => {
     if (!rawQrCodeString) {
         return res.send(`
@@ -60,14 +60,14 @@ app.get('/', (req, res) => {
                 <div style="max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
                     <h1>Aurora Bot 🤖</h1>
                     <p style="color: #666; font-size: 16px;">O WhatsApp está gerando o seu QR Code no servidor...</p>
-                    <p style="color: #999; font-size: 14px;">Esta página atualiza sozinha a cada 5 segundos.</p>
+                    <p style="color: #999; font-size: 14px;">Esta página atualiza sozinha a cada 60 segundos.</p>
                 </div>
-                <script>setTimeout(() => { location.reload(); }, 5000);</script>
+                <script>setTimeout(() => { location.reload(); }, 60000);</script>
             </body></html>
         `);
     }
 
-    // Gerador de imagem externo oficial e estável usando o texto puro gerado pelo bot
+    // Gerador de imagem externo oficial usando o texto puro gerado pelo bot
     const qrAppUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(rawQrCodeString)}`;
 
     res.send(`
@@ -85,7 +85,7 @@ app.get('/', (req, res) => {
                     <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
                     <p style="font-size: 12px; color: #999;">O painel recarrega automaticamente caso o QR Code expire.</p>
                 </div>
-                <script>setTimeout(() => { location.reload(); }, 20000);</script>
+                <script>setTimeout(() => { location.reload(); }, 60000);</script>
             </body>
         </html>
     `);
@@ -108,6 +108,7 @@ app.listen(PORT, '0.0.0.0', () => {
 const configIA = geminiApiKey ? { apiKey: geminiApiKey } : null;
 const ai = geminiApiKey ? new GoogleGenerativeAI(configIA) : null;
 
+// Configuração Otimizada do Puppeteer para rodar em servidores Linux (Railway)
 const client = new Client({
     authStrategy: new LocalAuth({
         dataPath: AUTH_DIR
@@ -121,12 +122,11 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process'
+            '--single-process',
+            '--disable-gpu' // Evita erros gráficos em ambientes headless
         ],
-        webVersionCache: {
-            type: 'remote',
-            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
-        }
+        handleSIGINT: false,
+        handleSIGTERM: false
     }
 });
 
@@ -136,7 +136,7 @@ client.on('qr', async (qr) => {
     
     rawQrCodeString = qr;
 
-    // Gera também no terminal em formato reduzido por garantia
+    // Exibe no terminal em formato reduzido por garantia
     qrcode.generate(qr, { small: true });
 
     try {
@@ -159,7 +159,7 @@ client.on('ready', () => {
     rawQrCodeString = null; // Remove o QR Code da tela já que conectou com sucesso
 });
 
-// LÓGICA DE PRIVACIDADE EXCLUSIVA: Responde apenas você mesmo
+// LÓGICA DE PRIVACIDADE EXCLUSIVA: Responde apenas você mesmo no chat privado
 client.on('message', async (msg) => {
     const chat = await msg.getChat();
     const deMim = msg.fromMe;
@@ -186,7 +186,7 @@ client.on('message', async (msg) => {
                 return;
             }
 
-            // Envia a mensagem para o cérebro do Gemini 2.5 Flash
+            // Envia a mensagem para o cérebro do Gemini
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: msg.body,
