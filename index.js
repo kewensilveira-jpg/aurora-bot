@@ -1,7 +1,6 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const qrcode = require('qrcode');
-const { GoogleGenAI } = require('@google/genai'); // Nova biblioteca oficial do Gemini
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -9,7 +8,8 @@ const port = process.env.PORT || 8080;
 let latestQr = null;
 let botStatus = 'Aguardando leitura do QR Code...';
 
-// Inicializa a IA usando a chave que vamos colocar na Railway
+// Inicializa a IA usando a chave que está na Railway
+const { GoogleGenAI } = require('@google/genai');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const client = new Client({
@@ -64,46 +64,40 @@ client.on('disconnected', (reason) => {
     client.initialize();
 });
 
-// ==================== FUNÇÃO DO CÉREBRO (GEMINI COM DOIS SETORES) ====================
+// ==================== FUNÇÃO DO CÉREBRO (GEMINI) ====================
 
 async function perguntarAoGemini(pergunta) {
-    // Instrução de personalidade da Aurora
     const systemInstruction = "Você é a Aurora, uma assistente virtual inteligente, prestativa e objetiva. Responda de forma natural.";
-
     try {
-        console.log('⚡ [SETOR 1] Tentando resposta com Gemini 2.5 Flash...');
+        console.log('⚡ [SETOR 1] Tentando com Gemini 2.5 Flash...');
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', // Setor 1: Principal e rápido
+            model: 'gemini-2.5-flash',
             contents: pergunta,
             config: { systemInstruction }
         });
         return response.text;
-
     } catch (errorFirstSector) {
-        console.error('⚠️ [SETOR 1 FALHOU] Erro no Gemini Flash. Acionando Setor 2 Reserva...', errorFirstSector);
-        
+        console.error('⚠️ [SETOR 1 FALHOU] Acionando Setor 2...', errorFirstSector);
         try {
-            console.log('🔥 [SETOR 2] Tentando resposta com Gemini 2.5 Pro...');
+            console.log('🔥 [SETOR 2] Tentando com Gemini 2.5 Pro...');
             const responseBackup = await ai.models.generateContent({
-                model: 'gemini-2.5-pro', // Setor 2: Reserva robusta
+                model: 'gemini-2.5-pro',
                 contents: pergunta,
                 config: { systemInstruction }
             });
             return responseBackup.text;
-
         } catch (errorSecondSector) {
-            console.error('❌ [CRÍTICO] Ambos os setores do Gemini falharam:', errorSecondSector);
-            return '🤖 Desculpe Kewen, meus dois setores de inteligência (Gemini Flash e Pro) estão instáveis ou fora do ar no momento.';
+            console.error('❌ [CRÍTICO] Ambos os setores falharam:', errorSecondSector);
+            return '🤖 Meus dois setores de inteligência falharam no momento.';
         }
     }
 }
 
-// ==================== LÓGICA DE PRIVACIDADE E RESPOSTA ====================
+// ==================== LÓGICA DE RESPOSTA ====================
 
 client.on('message_create', async (msg) => {
     try {
         const chat = await msg.getChat();
-        
         const ehMensagemDoKewen = 
             msg.fromMe || 
             msg.id.fromMe ||
@@ -112,25 +106,15 @@ client.on('message_create', async (msg) => {
             msg.from.includes('51997984859') ||
             msg.from.includes('5197984859');
 
-        if (!ehMensagemDoKewen) {
-            return;
-        }
-
+        if (!ehMensagemDoKewen) return;
         if (!msg.body) return;
 
         const textoMensagem = msg.body.trim();
-        
-        // Evita que ela responda a si mesma
         if (textoMensagem.startsWith('🤖')) return;
 
-        console.log(`💬 [PROCESSANDO] Enviando para a IA: "${textoMensagem}"`);
-
-        // Chama a inteligência do Gemini
+        console.log(`💬 [PROCESSANDO]: "${textoMensagem}"`);
         const respostaDaIA = await perguntarAoGemini(textoMensagem);
-
-        // Responde no WhatsApp com a resposta da IA
         await msg.reply(`🤖 ${respostaDaIA}`);
-
     } catch (error) {
         console.error('❌ [ERRO NO PROCESSAMENTO]:', error);
     }
@@ -138,53 +122,47 @@ client.on('message_create', async (msg) => {
 
 // ==================== SERVIDOR WEB (EXPRESS) ====================
 
+// Rota principal de Status (10 minutos estável)
 app.get('/', async (req, res) => {
+    res.send(`
+        <html>
+            <head>
+                <meta http-equiv="refresh" content="600">
+                <title>Aurora Bot - Status</title>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; background-color: #111; color: #fff; padding-top: 50px; }
+                    .status { font-size: 1.2em; color: #00ffcc; font-weight: bold; }
+                    a { color: #00ffcc; text-decoration: none; border: 1px solid #00ffcc; padding: 10px; border-radius: 5px; }
+                </style>
+            </head>
+            <body>
+                <h1>🤖 Aurora Bot Status</h1>
+                <p class="status">${botStatus}</p>
+                <br><br>
+                ${latestQr ? '<a href="/qr" target="_blank">Clique aqui para abrir o QR Code em PNG</a>' : ''}
+            </body>
+        </html>
+    `);
+});
+
+// O LINK DO PNG QUE VOCÊ QUERIA (Gera a imagem limpa na tela)
+app.get('/qr', async (req, res) => {
     if (!latestQr) {
-        res.send(`
-            <html>
-                <head>
-                    <meta http-equiv="refresh" content="600">
-                    <title>Aurora Bot - Status</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; text-align: center; background-color: #111; color: #fff; padding-top: 50px; }
-                        .status { font-size: 1.2em; color: #00ffcc; font-weight: bold; }
-                    </style>
-                </head>
-                <body>
-                    <h1>🤖 Aurora Bot Status</h1>
-                    <p class="status">${botStatus}</p>
-                </body>
-            </html>
-        `);
+        res.status(404).send('Nenhum QR Code disponível no momento ou o bot já está conectado. Volte à página inicial.');
         return;
     }
-
     try {
-        const qrImageBase64 = await qrcode.toDataURL(latestQr);
-        res.send(`
-            <html>
-                <head>
-                    <meta http-equiv="refresh" content="600">
-                    <title>Escaneie a Aurora</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; text-align: center; background-color: #111; color: #fff; padding-top: 30px; }
-                        .container { background-color: #222; padding: 30px; display: inline-block; border-radius: 15px; }
-                        img { border: 10px solid white; border-radius: 5px; margin-top: 15px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <h1>🤖 Conectar Aurora Bot</h1>
-                        <img src="${qrImageBase64}" alt="QR Code WhatsApp" />
-                    </div>
-                </body>
-            </html>
-        `);
+        const qrImageBuffer = await qrcode.toBuffer(latestQr);
+        res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Content-Length': qrImageBuffer.length
+        });
+        res.end(qrImageBuffer);
     } catch (err) {
-        res.status(500).send('Erro ao gerar o QR Code.');
+        res.status(500).send('Erro ao gerar o arquivo PNG do QR Code.');
     }
 });
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Express server running on port ${port}`);
 });
