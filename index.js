@@ -18,9 +18,6 @@ console.log('Starting Aurora bot...');
 console.log('Node env:', process.env.NODE_ENV);
 console.log('PORT:', PORT);
 console.log('GEMINI_API_KEY defined:', !!geminiApiKey);
-if (!geminiApiKey) {
-    console.warn('Aviso: variável GEMINI_API_KEY não definida. A IA ficará desativada, mas o QR code ainda pode ser gerado.');
-}
 
 // Garante que o diretório de dados exista antes de qualquer operação
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -29,7 +26,6 @@ if (!fs.existsSync(GASTOS_FILE) || fs.readFileSync(GASTOS_FILE, 'utf-8').trim() 
     fs.writeFileSync(GASTOS_FILE, JSON.stringify([], null, 2));
 }
 
-// Armazena o código do QR de forma segura na memória para a página Web
 let rawQrCodeString = null;
 
 process.on('uncaughtException', (err) => {
@@ -52,7 +48,7 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', qr: qrGenerated ? 'generated' : 'pending' });
 });
 
-// Painel web otimizado - Tempo ajustado para 60 segundos (Evita sobrecarga no deploy)
+// Painel web otimizado - ALTERAÇÃO 1: Tempo de recarga aumentado para 10 minutos (600000 ms)
 app.get('/', (req, res) => {
     if (!rawQrCodeString) {
         return res.send(`
@@ -60,14 +56,13 @@ app.get('/', (req, res) => {
                 <div style="max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
                     <h1>Aurora Bot 🤖</h1>
                     <p style="color: #666; font-size: 16px;">O WhatsApp está gerando o seu QR Code no servidor...</p>
-                    <p style="color: #999; font-size: 14px;">Esta página atualiza sozinha a cada 60 segundos.</p>
+                    <p style="color: #999; font-size: 14px;">Esta página atualiza sozinha a cada 10 minutos.</p>
                 </div>
-                <script>setTimeout(() => { location.reload(); }, 60000);</script>
+                <script>setTimeout(() => { location.reload(); }, 600000);</script>
             </body></html>
         `);
     }
 
-    // Gerador de imagem externo oficial usando o texto puro gerado pelo bot
     const qrAppUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(rawQrCodeString)}`;
 
     res.send(`
@@ -81,11 +76,11 @@ app.get('/', (req, res) => {
                         <img src="${qrAppUrl}" alt="QR Code WhatsApp" style="border: 4px solid #333; border-radius: 8px; width: 250px; height: 250px;" />
                     </div>
                     
-                    <p style="font-size: 14px; color: #555; line-height: 1.4;">Abra o WhatsApp no seu celular, vai em <b>Aparelhos Conectados</b> > <b>Conectar um aparelho</b> e aponte a câmera para a imagem acima.</p>
+                    <p style="font-size: 14px; color: #555; line-height: 1.4;">Abra o WhatsApp no seu celular, vá em <b>Aparelhos Conectados</b> > <b>Conectar um aparelho</b> e aponte a câmera para a imagem acima.</p>
                     <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-                    <p style="font-size: 12px; color: #999;">O painel recarrega automaticamente caso o QR Code expire.</p>
+                    <p style="font-size: 12px; color: #999;">O painel recarrega automaticamente a cada 10 minutos caso expire.</p>
                 </div>
-                <script>setTimeout(() => { location.reload(); }, 60000);</script>
+                <script>setTimeout(() => { location.reload(); }, 600000);</script>
             </body>
         </html>
     `);
@@ -108,11 +103,15 @@ app.listen(PORT, '0.0.0.0', () => {
 const configIA = geminiApiKey ? { apiKey: geminiApiKey } : null;
 const ai = geminiApiKey ? new GoogleGenerativeAI(configIA) : null;
 
-// Configuração Otimizada do Puppeteer para rodar em servidores Linux (Railway)
+// Configuração Otimizada - ALTERAÇÃO 2: Versão fixa e estável do WhatsApp Web instalada remotamente
 const client = new Client({
     authStrategy: new LocalAuth({
         dataPath: AUTH_DIR
     }),
+    webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
+    },
     puppeteer: {
         headless: true,
         args: [
@@ -130,12 +129,9 @@ const client = new Client({
     }
 });
 
-// Captura do QR Code corrigida para Railway
 client.on('qr', async (qr) => {
     console.log('🤖 [NOTIFICAÇÃO] NOVO QR CODE GERADO PELO WHATSAPP!');
-    
     rawQrCodeString = qr;
-
     qrcode.generate(qr, { small: true });
 
     try {
@@ -143,13 +139,7 @@ client.on('qr', async (qr) => {
         fs.writeFileSync(QRCODE_PNG_FILE, qrImage.imageSync(qr, { type: 'png' }));
         fs.writeFileSync(QRCODE_SVG_FILE, qrImage.imageSync(qr, { type: 'svg' }));
     } catch (err) {
-        try {
-            const qrcodeLib = require('qrcode');
-            const buffer = await qrcodeLib.toBuffer(qr, { type: 'png', width: 300 });
-            fs.writeFileSync(QRCODE_PNG_FILE, buffer);
-        } catch (e) {
-            console.error('Erro ao salvar arquivos estáticos do QR:', e.message);
-        }
+        console.error('Erro ao salvar arquivos do QR:', err.message);
     }
 });
 
@@ -158,34 +148,40 @@ client.on('ready', () => {
     rawQrCodeString = null;
 });
 
-// LÓGICA DE PRIVACIDADE EXCLUSIVA: Responde apenas ao Kewen
+// Monitoramento Geral de Mensagens Próprias para Debug no Console
+client.on('message_create', (msg) => {
+    if (msg.fromMe) {
+        console.log(`💬 [DEBUG LOG] Mensagem sua detectada saindo ou entrando: "${msg.body}"`);
+    }
+});
+
+// LÓGICA DE PRIVACIDADE EXCLUSIVA: Responde apenas ao Kewen (51997984859)
 client.on('message', async (msg) => {
     try {
         const chat = await msg.getChat();
         
-        // O número do Kewen formatado como o WhatsApp trata internamente
         const numeroKewen = '51997984859@c.us';
-        const numeroKewenSemNono = '5197984859@c.us'; // Backup de segurança para caso o WhatsApp oculte o 9
+        const numeroKewenSemNono = '5197984859@c.us';
 
-        // Verifica minuciosamente se a mensagem veio do Kewen ou se é o chat privado dele
+        // Validação expandida para pegar qualquer variação do seu número ou chat próprio
         const ehMensagemDoKewen = 
             msg.fromMe || 
             msg.from === numeroKewen || 
             msg.from === numeroKewenSemNono ||
             chat.id._serialized === numeroKewen ||
-            chat.id._serialized === numeroKewenSemNono;
+            chat.id._serialized === numeroKewenSemNono ||
+            chat.id.user.includes('51997984859') ||
+            chat.id.user.includes('5197984859');
 
-        // 🔥 FILTRO DE PRIVACIDADE: Se não for o Kewen, ignora na hora!
         if (!ehMensagemDoKewen) {
             return; 
         }
 
-        // Evita loops (robô respondendo robô)
         if (msg.body.startsWith('🤖')) return;
 
-        console.log(`📩 [AURORA PRIVADO] Mensagem do Kewen processada: "${msg.body}"`);
+        console.log(`📩 [AURORA PRIVADO] Processando comando do Kewen: "${msg.body}"`);
 
-        // Comando de gastos integrado ao banco de dados do Volume
+        // Comando de gastos integrado ao Volume da Railway
         if (msg.body.toLowerCase().startsWith('gasto') || msg.body.toLowerCase().startsWith('salvar')) {
             fs.appendFileSync(GASTOS_FILE, `${new Date().toISOString()} - ${msg.body}\n`);
             await msg.reply('🤖 Gasto anotado com sucesso no seu painel seguro do Volume!');
@@ -193,24 +189,20 @@ client.on('message', async (msg) => {
         }
 
         if (!ai) {
-            await msg.reply('🤖 A variável GEMINI_API_KEY não está configurada no deploy da Railway. Insira ela para falar com a IA.');
+            await msg.reply('🤖 A variável GEMINI_API_KEY não está configurada no deploy da Railway.');
             return;
         }
 
-        // Envia a mensagem para o cérebro do Gemini 2.5 Flash
+        // Envia para a inteligência artificial do Gemini
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: msg.body,
         });
 
-        // Responde de volta na sua conversa privada
         await msg.reply(`🤖 ${response.text}`);
 
     } catch (error) {
         console.error('❌ Erro no processamento da mensagem:', error);
-        if (msg.fromMe || msg.from.includes('51997984859') || msg.from.includes('5197984859')) {
-            await msg.reply('🤖 Desculpe, tive um probleminha técnico para processar essa mensagem agora.');
-        }
     }
 });
 
