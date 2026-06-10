@@ -5,6 +5,7 @@ const path = require('path');
 const express = require('express');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+// Configuração do Volume da Railway (Pasta com memória persistente)
 const DATA_DIR = path.resolve(__dirname, '.data');
 const AUTH_DIR = path.join(DATA_DIR, 'wwebjs_auth');
 const GASTOS_FILE = path.join(DATA_DIR, 'gastos.json');
@@ -21,12 +22,15 @@ if (!geminiApiKey) {
     console.warn('Aviso: variável GEMINI_API_KEY não definida. A IA ficará desativada, mas o QR code ainda pode ser gerado.');
 }
 
-// Garante que o diretório de dados exista antes de qualquer operação de I/O
+// Garante que o diretório de dados exista antes de qualquer operação
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 if (!fs.existsSync(GASTOS_FILE) || fs.readFileSync(GASTOS_FILE, 'utf-8').trim() === "") {
     fs.writeFileSync(GASTOS_FILE, JSON.stringify([], null, 2));
 }
+
+// Armazena o código do QR de forma segura na memória para a página Web
+let rawQrCodeString = null;
 
 process.on('uncaughtException', (err) => {
     console.error('uncaughtException:', err);
@@ -48,120 +52,65 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', qr: qrGenerated ? 'generated' : 'pending' });
 });
 
+// Painel web otimizado que gera o QR Code limpo sem bugar pixels
 app.get('/', (req, res) => {
-    const pngExists = fs.existsSync(QRCODE_PNG_FILE);
-    const svgExists = fs.existsSync(QRCODE_SVG_FILE);
+    if (!rawQrCodeString) {
+        return res.send(`
+            <html><body style="font-family: Arial, sans-serif; padding: 24px; text-align: center; background-color: #f4f6f9;">
+                <div style="max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                    <h1>Aurora Bot 🤖</h1>
+                    <p style="color: #666; font-size: 16px;">O WhatsApp está gerando o seu QR Code no servidor...</p>
+                    <p style="color: #999; font-size: 14px;">Esta página atualiza sozinha a cada 5 segundos.</p>
+                </div>
+                <script>setTimeout(() => { location.reload(); }, 5000);</script>
+            </body></html>
+        `);
+    }
+
+    // Gerador de imagem externo oficial e estável usando o texto puro gerado pelo bot
+    const qrAppUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(rawQrCodeString)}`;
+
     res.send(`
         <html>
-            <body style="font-family: Arial, sans-serif; padding: 24px;">
-                <h1>Aurora Bot</h1>
-                <p>Status: ${pngExists || svgExists ? 'QR code generated' : 'Waiting for QR code'}</p>
-                ${svgExists ? '<img src="/qrcode.svg" alt="QR code" style="max-width: 100%; height: auto;" />' : ''}
-                ${!svgExists && pngExists ? '<p><a href="/qrcode.png" target="_blank">Abrir QR code PNG</a></p>' : ''}
-                ${!pngExists && !svgExists ? '<p>Aguarde até que o QR code seja gerado pelo bot.</p>' : ''}
-                <p>Se o QR code aparecer quebrado, atualize a página após o próximo evento de QR.</p>
+            <body style="font-family: Arial, sans-serif; padding: 24px; text-align: center; background-color: #f4f6f9;">
+                <div style="max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                    <h1 style="color: #333; margin-bottom: 5px;">Aurora Bot 🤖</h1>
+                    <p style="color: #2ecc71; font-weight: bold; margin-top: 0; font-size: 16px;">🟢 QR Code Pronto para Escanear</p>
+                    
+                    <div style="margin: 25px 0;">
+                        <img src="${qrAppUrl}" alt="QR Code WhatsApp" style="border: 4px solid #333; border-radius: 8px; width: 250px; height: 250px;" />
+                    </div>
+                    
+                    <p style="font-size: 14px; color: #555; line-height: 1.4;">Abra o WhatsApp no seu celular, vá em <b>Aparelhos Conectados</b> > <b>Conectar um aparelho</b> e aponte a câmera para a imagem acima.</p>
+                    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+                    <p style="font-size: 12px; color: #999;">O painel recarrega automaticamente caso o QR Code expire.</p>
+                </div>
+                <script>setTimeout(() => { location.reload(); }, 20000);</script>
             </body>
-        </html>`);
-});
-
-app.get('/qrcode.png', (req, res) => {
-    if (!fs.existsSync(QRCODE_PNG_FILE)) {
-        return res.status(404).send('QR code ainda não foi gerado. Aguarde.');
-    }
-    res.type('image/png');
-    res.sendFile(QRCODE_PNG_FILE, (err) => {
-        if (err) {
-            console.error('Erro ao enviar qrcode.png:', err);
-            if (!res.headersSent) {
-                res.status(500).send('Erro interno ao enviar qrcode.png');
-            }
-        }
-    });
-});
-
-app.get('/qrcode.svg', (req, res) => {
-    if (!fs.existsSync(QRCODE_SVG_FILE)) {
-        return res.status(404).send('QR code SVG ainda não foi gerado. Aguarde.');
-    }
-    res.type('image/svg+xml');
-    res.sendFile(QRCODE_SVG_FILE, (err) => {
-        if (err) {
-            console.error('Erro ao enviar qrcode.svg:', err);
-            if (!res.headersSent) {
-                res.status(500).send('Erro interno ao enviar qrcode.svg');
-            }
-        }
-    });
-});
-
-app.get('/qrcode-inline', (req, res) => {
-    if (!fs.existsSync(QRCODE_PNG_FILE)) {
-        return res.status(404).send('QR code ainda não foi gerado. Aguarde.');
-    }
-    const png = fs.readFileSync(QRCODE_PNG_FILE);
-    const b64 = png.toString('base64');
-    res.send(`
-        <html><body style="font-family: Arial, sans-serif; padding:24px;">
-            <h1>QR code (inline)</h1>
-            <p>Abra a imagem abaixo no seu celular e escaneie com o WhatsApp.</p>
-            <img src="data:image/png;base64,${b64}" alt="QR code" style="max-width:100%;height:auto;" />
-        </body></html>
+        </html>
     `);
 });
 
-app.get('/qr-base64.txt', (req, res) => {
-    if (!fs.existsSync(QRCODE_PNG_FILE)) {
-        return res.status(404).send('QR code ainda não foi gerado. Aguarde.');
-    }
-    try {
-        const png = fs.readFileSync(QRCODE_PNG_FILE);
-        const b64 = png.toString('base64');
-        res.setHeader('Content-Type', 'text/plain');
-        res.setHeader('Content-Disposition', 'attachment; filename="qr-base64.txt"');
-        res.send(b64);
-    } catch (err) {
-        console.error('Erro ao ler QR PNG para base64:', err);
-        res.status(500).send('Erro interno ao gerar base64 do QR.');
-    }
+app.get('/qrcode.png', (req, res) => {
+    if (!fs.existsSync(QRCODE_PNG_FILE)) return res.status(404).send('Gerando...');
+    res.type('image/png').sendFile(QRCODE_PNG_FILE);
 });
 
-app.get('/qr-dataurl.json', (req, res) => {
-    if (!fs.existsSync(QRCODE_PNG_FILE)) {
-        return res.status(404).json({ error: 'QR code ainda não foi gerado. Aguarde.' });
-    }
-    try {
-        const png = fs.readFileSync(QRCODE_PNG_FILE);
-        const b64 = png.toString('base64');
-        res.json({ dataUrl: `data:image/png;base64,${b64}` });
-    } catch (err) {
-        console.error('Erro ao ler QR PNG para data URL:', err);
-        res.status(500).json({ error: 'Erro interno ao gerar data URL do QR.' });
-    }
-});
-
-app.get('/qr-info', (req, res) => {
-    const info = {
-        qrPngExists: fs.existsSync(QRCODE_PNG_FILE),
-        qrSvgExists: fs.existsSync(QRCODE_SVG_FILE),
-        qrPngSize: fs.existsSync(QRCODE_PNG_FILE) ? fs.statSync(QRCODE_PNG_FILE).size : 0,
-        qrSvgSize: fs.existsSync(QRCODE_SVG_FILE) ? fs.statSync(QRCODE_SVG_FILE).size : 0,
-        dataDir: DATA_DIR,
-    };
-    res.json(info);
+app.get('/qrcode.svg', (req, res) => {
+    if (!fs.existsSync(QRCODE_SVG_FILE)) return res.status(404).send('Gerando...');
+    res.type('image/svg+xml').sendFile(QRCODE_SVG_FILE);
 });
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Express server running on port ${PORT}`);
 });
 
-// 1. Configuração Otimizada da API do Gemini (Evita bloqueio do GitHub)
 const configIA = geminiApiKey ? { apiKey: geminiApiKey } : null;
 const ai = geminiApiKey ? new GoogleGenerativeAI(configIA) : null;
 
-// 2. Configuração do Cliente WhatsApp com travas de estabilidade e Memória RAM
 const client = new Client({
     authStrategy: new LocalAuth({
-        dataPath: AUTH_DIR // Caminho gravável para Railway
+        dataPath: AUTH_DIR
     }),
     puppeteer: {
         headless: true,
@@ -172,9 +121,8 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process' // Economiza RAM no servidor da Railway
+            '--single-process'
         ],
-        // Corrige o erro "Execution context was destroyed" forçando uma versão estável
         webVersionCache: {
             type: 'remote',
             remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
@@ -182,104 +130,81 @@ const client = new Client({
     }
 });
 
-// 3. Geração do QR Code nos logs da Railway
+// Captura do QR Code corrigida para Railway
 client.on('qr', async (qr) => {
-    console.log('🤖 NOVO QR CODE GERADO...');
+    console.log('🤖 [NOTIFICAÇÃO] NOVO QR CODE GERADO PELO WHATSAPP!');
+    
+    rawQrCodeString = qr;
+
+    // Gera também no terminal em formato reduzido por garantia
     qrcode.generate(qr, { small: true });
 
-    let generated = false;
     try {
         const qrImage = require('qr-image');
-        const qrPng = qrImage.imageSync(qr, { type: 'png' });
-        const qrSvg = qrImage.imageSync(qr, { type: 'svg' });
-        fs.writeFileSync(QRCODE_PNG_FILE, qrPng);
-        fs.writeFileSync(QRCODE_SVG_FILE, qrSvg);
-        console.log(`✅ QR code salvo em PNG: ${QRCODE_PNG_FILE}`);
-        console.log(`✅ QR code salvo em SVG: ${QRCODE_SVG_FILE}`);
-        generated = true;
+        fs.writeFileSync(QRCODE_PNG_FILE, qrImage.imageSync(qr, { type: 'png' }));
+        fs.writeFileSync(QRCODE_SVG_FILE, qrImage.imageSync(qr, { type: 'svg' }));
     } catch (err) {
-        console.warn('qr-image falhou ou não está disponível, tentando fallback com qrcode:', err?.message || err);
-    }
-
-    if (!generated) {
         try {
             const qrcodeLib = require('qrcode');
             const buffer = await qrcodeLib.toBuffer(qr, { type: 'png', width: 300 });
             fs.writeFileSync(QRCODE_PNG_FILE, buffer);
-            console.log(`✅ QR code (fallback) salvo em PNG: ${QRCODE_PNG_FILE}`);
-
-            try {
-                const svg = await qrcodeLib.toString(qr, { type: 'svg' });
-                fs.writeFileSync(QRCODE_SVG_FILE, svg);
-                console.log(`✅ QR code (fallback) salvo em SVG: ${QRCODE_SVG_FILE}`);
-            } catch (svgErr) {
-                console.warn('Falha ao gerar SVG com qrcode:', svgErr?.message || svgErr);
-            }
-
-            generated = true;
-        } catch (err) {
-            console.error('Falha ao gerar QR code via qrcode:', err);
+        } catch (e) {
+            console.error('Erro ao salvar arquivos estáticos do QR:', e.message);
         }
     }
-
-    if (!generated) {
-        console.log('Aviso: não foi possível gerar QR em PNG nem SVG. Exiba o ASCII no terminal ou instale qr-image/qrcode corretamente.');
-    } else {
-        console.log('🔗 Acesse /qrcode.png ou /qrcode.svg para abrir o QR no navegador.');
-    }
 });
 
-// 4. Confirmação de conexão com sucesso
 client.on('ready', () => {
     console.log('🔒 [PRIVADO ATIVADO] Aurora rodando de forma ultra segura no seu chat!');
+    rawQrCodeString = null; // Remove o QR Code da tela já que conectou com sucesso
 });
 
-// 5. Lógica de Mensagens (Foco no Chat Privado consigo mesmo)
+// LÓGICA DE PRIVACIDADE EXCLUSIVA: Responde apenas você mesmo
 client.on('message', async (msg) => {
     const chat = await msg.getChat();
     const deMim = msg.fromMe;
     const meuNumero = client.info.wid._serialized;
 
-    // Filtro de Segurança: Responde APENAS no chat privado com seu próprio número
+    // Filtro Reforçado: O bot só aceita mensagens enviadas de você para você mesmo
     if (msg.from === meuNumero || chat.id._serialized === meuNumero) {
         
-        // Evita loops infinitos de respostas
+        // Evita loops caso o bot tente responder a si mesmo
         if (deMim && msg.body.startsWith('🤖')) return;
 
         try {
-            console.log(`📩 Mensagem recebida no privado: ${msg.body}`);
+            console.log(`📩 Mensagem sua recebida no chat privado: ${msg.body}`);
 
-            // Exemplo de sistema de gastos integrado ao arquivo local do volume
+            // Comando de gastos integrado ao banco de dados do Volume
             if (msg.body.toLowerCase().startsWith('gasto') || msg.body.toLowerCase().startsWith('salvar')) {
                 fs.appendFileSync(GASTOS_FILE, `${new Date().toISOString()} - ${msg.body}\n`);
-                await msg.reply('🤖 Gasto anotado com sucesso no seu painel seguro!');
+                await msg.reply('🤖 Gasto anotado com sucesso no seu painel seguro do Volume!');
                 return;
             }
 
             if (!ai) {
-                await msg.reply('🤖 A variável GEMINI_API_KEY não está configurada no deploy. Configure-a para ativar as respostas da IA.');
+                await msg.reply('🤖 A variável GEMINI_API_KEY não está configurada no deploy da Railway. Insira ela para falar com a IA.');
                 return;
             }
 
-            // Envia a mensagem para a IA do Gemini responder
+            // Envia a mensagem para o cérebro do Gemini 2.5 Flash
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: msg.body,
             });
 
-            // Responde no WhatsApp com a inteligência do Gemini
+            // Responde de volta na sua conversa privada
             await msg.reply(`🤖 ${response.text}`);
 
         } catch (error) {
-            console.error('❌ Erro ao processar mensagem ou chamar a IA:', error);
+            console.error('❌ Erro no processamento da IA:', error);
             await msg.reply('🤖 Desculpe, tive um probleminha técnico para processar essa mensagem agora.');
         }
     }
+    // Qualquer mensagem de terceiros cai aqui e é ignorada silenciosamente!
 });
 
-// Inicializa o Bot (pode ser pulado em ambientes de teste definindo SKIP_WA=true)
 if (process.env.SKIP_WA === 'true') {
-    console.log('SKIP_WA=true -> pulando inicialização do cliente WhatsApp (teste de web server).');
+    console.log('SKIP_WA=true -> pulando inicialização do cliente WhatsApp.');
 } else {
     client.initialize();
 }
